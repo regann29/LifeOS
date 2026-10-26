@@ -2,6 +2,7 @@ from openai import OpenAIError
 from openai.types.chat import ChatCompletionMessageParam
 
 from core.llm import stream_chat
+from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory.manager import add
 from memory.proposals import extract_proposals
@@ -44,6 +45,39 @@ def _end_session(
     return _new_session()
 
 
+def _run_agent(messages: list[ChatCompletionMessageParam]) -> str:
+    response = ""
+    events = agent_events(messages)
+    while True:
+        approval_id: str | None = None
+        approved = False
+        for event in events:
+            if event["type"] == "delta":
+                text = str(event["text"])
+                response += text
+                print(text, end="", flush=True)
+            elif event["type"] == "approval_required":
+                print(
+                    f"\n\nApproval needed: {event['description']}\n"
+                    f"Input: {event['input']}"
+                )
+                answer = input("Approve? [y/N] ").strip().lower()
+                approval_id = str(event["approval_id"])
+                approved = answer in {"y", "yes"}
+                break
+            elif event["type"] == "error":
+                print(f"\nLifeOS could not continue: {event['message']}")
+                return response
+            elif event["type"] == "done":
+                print()
+                return response
+
+        if approval_id is None:
+            print()
+            return response
+        events = resume_approval(approval_id, approved)
+
+
 def main() -> None:
     messages = _new_session()
     print("LifeOS chat (type /end to review memories, /exit to quit)")
@@ -66,12 +100,8 @@ def main() -> None:
 
         messages.append({"role": "user", "content": text})
         print("LifeOS: ", end="", flush=True)
-        answer = ""
         try:
-            for part in stream_chat(messages):
-                print(part, end="", flush=True)
-                answer += part
-            print()
+            answer = _run_agent(messages)
             messages.append({"role": "assistant", "content": answer})
         except (RuntimeError, OpenAIError) as error:
             messages.pop()

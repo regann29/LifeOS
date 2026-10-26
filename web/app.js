@@ -129,6 +129,7 @@ function addApprovalCard(approval, answerElement) {
       });
       const result = await readAgentStream(response, answerElement);
       if (result.approval) {
+        card.remove();
         addApprovalCard(result.approval, answerElement);
         return;
       }
