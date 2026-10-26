@@ -436,7 +436,7 @@ form.addEventListener("submit", async (event) => {
     if (!result.completed) throw new Error("The response stream ended unexpectedly.");
     conversation.push({ role: "assistant", content: answer });
     await loadActivity();
-    notice.textContent = "Sent to the configured model provider (Nebius by default). This build does not redact personal details.";
+    notice.textContent = "Sent to the configured model provider. This build does not redact personal details.";
   } catch (error) {
     answerElement.textContent = error.message;
     answerElement.classList.add("error-message");

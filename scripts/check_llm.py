@@ -22,9 +22,6 @@ def main() -> int:
     except OpenAIError as error:
         print(friendly_provider_error(error))
         return 1
-    except Exception:
-        print("The model check failed. Check your provider settings and try again.")
-        return 1
 
     if not answer.strip():
         print("The model connection opened, but no answer text was returned.")
