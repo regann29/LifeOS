@@ -164,6 +164,30 @@ def test_provider_error_does_not_leak_key_or_exception_text(
     assert private_marker not in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ("error_name", "message"),
+    [
+        ("AuthenticationError", llm.API_KEY_ERROR),
+        ("NotFoundError", llm.MODEL_ERROR),
+        ("APIConnectionError", llm.CONNECTION_ERROR),
+    ],
+)
+def test_provider_errors_use_friendly_messages(
+    monkeypatch: pytest.MonkeyPatch,
+    error_name: str,
+    message: str,
+) -> None:
+    error_type = type(error_name, (OpenAIError,), {})
+    monkeypatch.setattr(llm, error_name, error_type)
+    _setup_fake_client(monkeypatch, error=error_type("private-error-marker"))
+
+    with pytest.raises(RuntimeError) as error:
+        list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
+
+    assert str(error.value) == message
+    assert "private-error-marker" not in str(error.value)
+
+
 def test_startup_configuration_check_returns_friendly_key_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -171,3 +195,16 @@ def test_startup_configuration_check_returns_friendly_key_error(
     monkeypatch.setenv("LLM_API_KEY", "replace-with-your-new-key")
 
     assert llm.validate_llm_configuration() == llm.API_KEY_ERROR
+
+
+def test_strict_answer_stream_discards_reasoning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup_fake_client(
+        monkeypatch,
+        [_chunk(reasoning="must not be saved", content="[]")],
+    )
+
+    assert list(
+        llm.stream_strict_answer([{"role": "user", "content": "Return JSON."}])
+    ) == ["[]"]
