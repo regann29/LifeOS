@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from openai import OpenAIError
 from pydantic import BaseModel, Field
 
-from core.llm import stream_chat
+from core.llm import friendly_provider_error, stream_answer, validate_llm_configuration
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory import manager
@@ -18,6 +18,13 @@ from tools.activity import list_activity
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="LifeOS")
+
+
+@app.on_event("startup")
+def check_llm_configuration() -> None:
+    configuration_error = validate_llm_configuration()
+    if configuration_error:
+        logger.warning("%s", configuration_error)
 
 
 class ChatMessage(BaseModel):
@@ -99,14 +106,8 @@ def chat(request: ChatRequest) -> StreamingResponse:
         except (OSError, ValueError) as error:
             logger.exception("A local tool or activity log operation failed")
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
-        except OpenAIError:
-            logger.exception("The model provider request failed")
-            yield json.dumps(
-                {
-                    "type": "error",
-                    "message": "The model request failed. Check the server logs and your provider settings.",
-                }
-            ) + "\n"
+        except OpenAIError as error:
+            yield json.dumps({"type": "error", "message": friendly_provider_error(error)}) + "\n"
 
     return StreamingResponse(
         response_lines(),
@@ -126,14 +127,8 @@ def decide_approval(decision: ApprovalDecision) -> StreamingResponse:
         except (OSError, ValueError) as error:
             logger.exception("A local tool or activity log operation failed after approval")
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
-        except OpenAIError:
-            logger.exception("The model provider request failed after tool approval")
-            yield json.dumps(
-                {
-                    "type": "error",
-                    "message": "The model request failed. Check the server logs and your provider settings.",
-                }
-            ) + "\n"
+        except OpenAIError as error:
+            yield json.dumps({"type": "error", "message": friendly_provider_error(error)}) + "\n"
 
     return StreamingResponse(
         response_lines(),
@@ -202,14 +197,13 @@ def delete_memory(change: MemoryLineReference) -> dict[str, bool]:
 def end_session(request: ChatRequest) -> dict[str, object]:
     messages = [message.model_dump() for message in request.messages]
     try:
-        proposals = extract_proposals(messages, stream_chat)
+        proposals = extract_proposals(messages, stream_answer)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except OpenAIError as error:
-        logger.exception("The model provider failed to suggest memories")
         raise HTTPException(
             status_code=502,
-            detail="The model request failed. Check the server logs and provider settings.",
+            detail=friendly_provider_error(error),
         ) from error
     return {
         "proposals": proposals,

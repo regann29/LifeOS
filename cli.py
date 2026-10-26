@@ -1,7 +1,7 @@
 from openai import OpenAIError
 from openai.types.chat import ChatCompletionMessageParam
 
-from core.llm import stream_chat
+from core.llm import friendly_provider_error, stream_answer
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory.manager import add
@@ -19,7 +19,7 @@ def _end_session(
     if not conversation:
         print("Nothing to save.")
         return _new_session()
-    proposals = extract_proposals(conversation, stream_chat)
+    proposals = extract_proposals(conversation, stream_answer)
     if not proposals:
         print("Nothing to save.")
         return _new_session()
@@ -52,7 +52,7 @@ def _run_agent(messages: list[ChatCompletionMessageParam]) -> str:
         approval_id: str | None = None
         approved = False
         for event in events:
-            if event["type"] == "delta":
+            if event["type"] == "answer":
                 text = str(event["text"])
                 response += text
                 print(text, end="", flush=True)
@@ -94,8 +94,10 @@ def main() -> None:
         if text == "/end":
             try:
                 messages = _end_session(messages)
-            except (RuntimeError, OpenAIError) as error:
+            except RuntimeError as error:
                 print(f"\nLifeOS could not review this session: {error}")
+                except OpenAIError as error:
+                    print(f"\nLifeOS could not review this session: {friendly_provider_error(error)}")
             continue
         if not text:
             continue
@@ -105,9 +107,12 @@ def main() -> None:
         try:
             answer = _run_agent(messages)
             messages.append({"role": "assistant", "content": answer})
-        except (RuntimeError, OpenAIError) as error:
+        except RuntimeError as error:
             messages.pop()
             print(f"\nLifeOS could not complete the request: {error}")
+        except OpenAIError as error:
+            messages.pop()
+            print(f"\nLifeOS could not complete the request: {friendly_provider_error(error)}")
 
 
 if __name__ == "__main__":

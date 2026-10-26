@@ -106,10 +106,13 @@ def _stream_agent(
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
+                reasoning = getattr(delta, "reasoning_content", None)
+                if isinstance(reasoning, str) and reasoning:
+                    yield {"type": "reasoning", "text": reasoning}
                 text = getattr(delta, "content", None)
                 if isinstance(text, str) and text:
                     content += text
-                    yield {"type": "delta", "text": text}
+                    yield {"type": "answer", "text": text}
                 for partial in getattr(delta, "tool_calls", None) or []:
                     index = partial.index
                     call = gathered.setdefault(
@@ -161,7 +164,7 @@ def _stream_agent(
                     {"error": "The five-tool-step limit was reached."},
                 )
                 yield {
-                    "type": "delta",
+                    "type": "answer",
                     "text": "I stopped because this request reached the five-tool-step limit.",
                 }
                 yield {"type": "done"}
@@ -179,7 +182,7 @@ def _stream_agent(
                     ValueError(str(error)),
                 )
                 if not invalid:
-                    yield {"type": "delta", "text": explanation}
+                    yield {"type": "answer", "text": explanation}
                     yield {"type": "done"}
                     return
                 call_index += 1
@@ -189,7 +192,7 @@ def _stream_agent(
             except ValueError as error:
                 invalid, explanation = _tool_error(state, call, name, arguments, error)
                 if not invalid:
-                    yield {"type": "delta", "text": explanation}
+                    yield {"type": "answer", "text": explanation}
                     yield {"type": "done"}
                     return
                 call_index += 1
