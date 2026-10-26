@@ -27,7 +27,7 @@ def _fake_model(monkeypatch: pytest.MonkeyPatch, responses: list[str]) -> list[d
     class FakeClient:
         def __init__(self, **kwargs: str) -> None:
             assert kwargs["base_url"] == "https://example.test/v1"
-            assert kwargs["api_key"] == "test-key"
+            assert kwargs["api_key"] == "x"
             self.chat = SimpleNamespace(completions=FakeCompletions())
 
     monkeypatch.setattr(llm, "OpenAI", FakeClient)

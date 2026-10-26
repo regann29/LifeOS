@@ -1,7 +1,8 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 from collections.abc import Iterator
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -17,14 +18,16 @@ from memory.proposals import MemoryProposal, extract_proposals
 from tools.activity import list_activity
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="LifeOS")
 
-
-@app.on_event("startup")
-def check_llm_configuration() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configuration_error = validate_llm_configuration()
     if configuration_error:
         logger.warning("%s", configuration_error)
+    yield
+
+
+app = FastAPI(title="LifeOS", lifespan=lifespan)
 
 
 class ChatMessage(BaseModel):
