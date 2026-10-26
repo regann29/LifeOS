@@ -32,14 +32,11 @@ def _tool_call(name: str, arguments: str) -> object:
     return SimpleNamespace(index=0, id="call-1", function=function)
 
 
-def _completion_with_task_call(
-    messages,
-    tools,
-):
+def _completion_with_task_call(_messages, _tools):
     return [_chunk(tool_call=_tool_call("tasks", '{"action":"add","title":"Plan garden"}'))]
 
 
-def _completion_final(messages, tools):
+def _completion_final(_messages, _tools):
     return [_chunk(text="The task is ready.")]
 
 

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from memory.manager import user_data_dir
 
 
