@@ -9,6 +9,7 @@ from memory import manager
 from tools import activity
 from tools.registry import TOOL_DEFINITIONS, execute_tool, prepare_tool
 from tools.tasks import list_tasks
+from tools import web_search
 
 
 @pytest.fixture(autouse=True)
@@ -106,3 +107,50 @@ def test_notes_search_reads_local_notes_only() -> None:
 def test_registry_exposes_exactly_three_native_tools() -> None:
     names = [item["function"]["name"] for item in TOOL_DEFINITIONS]
     assert names == ["notes_search", "tasks", "web_search"]
+
+
+def test_web_search_uses_tavily_and_returns_limited_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeTavilyClient:
+        def __init__(self, api_key: str) -> None:
+            captured["api_key"] = api_key
+
+        def search(self, **kwargs: object) -> dict[str, object]:
+            captured.update(kwargs)
+            return {
+                "results": [
+                    {
+                        "title": "Garden guide",
+                        "url": "https://example.test/garden",
+                        "content": "Useful result",
+                        "raw_content": "not returned",
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(web_search, "TavilyClient", FakeTavilyClient)
+    monkeypatch.setattr(web_search, "load_dotenv", lambda: None)
+    monkeypatch.setenv("TAVILY_API_KEY", "test-tavily-key")
+
+    results = web_search.search_web("garden planning")
+
+    assert captured["api_key"] == "test-tavily-key"
+    assert captured["query"] == "garden planning"
+    assert results == [
+        {
+            "title": "Garden guide",
+            "url": "https://example.test/garden",
+            "content": "Useful result",
+        }
+    ]
+
+
+def test_web_search_reports_missing_tavily_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(web_search, "load_dotenv", lambda: None)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
+        web_search.search_web("garden planning")

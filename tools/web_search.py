@@ -1,10 +1,12 @@
 import os
 from typing import Any
 
+from dotenv import load_dotenv
 from tavily import TavilyClient
 
 
 def search_web(query: str) -> list[dict[str, str]]:
+    load_dotenv()
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         raise RuntimeError("Web search needs TAVILY_API_KEY in the local environment.")
