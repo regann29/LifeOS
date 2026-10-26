@@ -19,12 +19,17 @@ def _user_id() -> str:
     return user_id
 
 
-def _memory_dir() -> Path:
+def user_data_dir() -> Path:
     data_root = DATA_ROOT.resolve()
     user_dir = data_root / _user_id()
     if user_dir.resolve() != user_dir:
         raise ValueError("LIFEOS_USER cannot point to a linked folder.")
-    path = user_dir / "memory"
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir
+
+
+def _memory_dir() -> Path:
+    path = user_data_dir() / "memory"
     path.mkdir(parents=True, exist_ok=True)
     if path.resolve() != path:
         raise ValueError("The memory folder cannot be a linked folder.")

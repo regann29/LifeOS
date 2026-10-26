@@ -9,10 +9,12 @@ from openai import OpenAIError
 from pydantic import BaseModel, Field
 
 from core.llm import stream_chat
+from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory import manager
 from memory.confirmation import save_proposals
 from memory.proposals import MemoryProposal, extract_proposals
+from tools.activity import list_activity
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="LifeOS")
@@ -51,6 +53,11 @@ class MemoryProposalRequest(BaseModel):
     proposals: list[MemoryProposalInput] = Field(max_length=40)
 
 
+class ApprovalDecision(BaseModel):
+    approval_id: str = Field(min_length=32, max_length=64, pattern=r"^[a-f0-9]+$")
+    approved: bool
+
+
 class MemoryLineResponse(BaseModel):
     line_number: int
     text: str
@@ -85,9 +92,8 @@ def chat(request: ChatRequest) -> StreamingResponse:
 
     def response_lines() -> Iterator[str]:
         try:
-            for text in stream_chat(messages):
-                yield json.dumps({"type": "delta", "text": text}) + "\n"
-            yield json.dumps({"type": "done"}) + "\n"
+            for event in agent_events(messages):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
         except RuntimeError as error:
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
         except OpenAIError:
@@ -104,6 +110,38 @@ def chat(request: ChatRequest) -> StreamingResponse:
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/approval")
+def decide_approval(decision: ApprovalDecision) -> StreamingResponse:
+    def response_lines() -> Iterator[str]:
+        try:
+            for event in resume_approval(decision.approval_id, decision.approved):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except RuntimeError as error:
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+        except OpenAIError:
+            logger.exception("The model provider request failed after tool approval")
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": "The model request failed. Check the server logs and your provider settings.",
+                }
+            ) + "\n"
+
+    return StreamingResponse(
+        response_lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/activity")
+def get_activity() -> dict[str, list[dict[str, object]]]:
+    try:
+        return {"entries": list_activity()}
+    except (ValueError, OSError) as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 @app.get("/api/memory")

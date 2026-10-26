@@ -8,7 +8,11 @@ data/*
 !data/demo/
 data/demo/*
 !data/demo/memory/
+!data/demo/notes/
 data/demo/memory/*
 !data/demo/memory/profile.md
 !data/demo/memory/preferences.md
 !data/demo/memory/events.md
+data/demo/notes/*
+!data/demo/notes/garden-planning.md
+!data/demo/tasks.json
