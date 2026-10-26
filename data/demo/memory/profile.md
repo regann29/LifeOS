@@ -1,0 +1,2 @@
+- Mira Chen is a fictional urban garden coordinator in Portland.
+- Mira is planning a neighborhood seed-sharing table for early spring.

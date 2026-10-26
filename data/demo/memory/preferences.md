@@ -1,0 +1,2 @@
+- Mira prefers concise answers with a short list of practical next steps.
+- Mira likes low-cost, low-waste ideas and a warm, encouraging tone.
