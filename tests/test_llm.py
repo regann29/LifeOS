@@ -135,9 +135,10 @@ def test_placeholder_key_fails_before_client_request(
     monkeypatch.setenv("LLM_API_KEY", "<paste your NEW key here, nowhere else>")
     requested = False
 
-    def unexpected_client(**_kwargs: str) -> object:
+    def unexpected_client(**kwargs: str) -> object:
         nonlocal requested
         requested = True
+        _ = kwargs
         raise AssertionError("No client should be created for a placeholder key.")
 
     monkeypatch.setattr(llm, "OpenAI", unexpected_client)
