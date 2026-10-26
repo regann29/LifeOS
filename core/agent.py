@@ -148,9 +148,24 @@ def _stream_agent(
             yield {"type": "tool_step", "tool": name, "label": _progress_label(name)}
             try:
                 arguments = parse_arguments(function.get("arguments", ""))
-                plan = prepare_tool(name, arguments)
             except (ValueError, json.JSONDecodeError) as error:
-                invalid, explanation = _tool_error(state, call, name, {}, ValueError(str(error)))
+                invalid, explanation = _tool_error(
+                    state,
+                    call,
+                    name,
+                    {"raw_arguments": function.get("arguments", "")},
+                    ValueError(str(error)),
+                )
+                if not invalid:
+                    yield {"type": "delta", "text": explanation}
+                    yield {"type": "done"}
+                    return
+                call_index += 1
+                continue
+            try:
+                plan = prepare_tool(name, arguments)
+            except ValueError as error:
+                invalid, explanation = _tool_error(state, call, name, arguments, error)
                 if not invalid:
                     yield {"type": "delta", "text": explanation}
                     yield {"type": "done"}
