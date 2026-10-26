@@ -1,7 +1,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
-from collections.abc import Iterator
+from collections.abc import AsyncGenerator, Iterator
 from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, HTTPException
@@ -20,7 +20,7 @@ from tools.activity import list_activity
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     configuration_error = validate_llm_configuration()
     if configuration_error:
         logger.warning("%s", configuration_error)
