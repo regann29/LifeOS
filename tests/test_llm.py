@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from core import llm
+from tools.registry import TOOL_DEFINITIONS
 
 
 def test_stream_chat_reads_configuration_and_yields_text(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,3 +46,35 @@ def test_stream_chat_reports_missing_configuration(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(RuntimeError, match="LLM_BASE_URL, LLM_API_KEY, LLM_MODEL"):
         list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
+
+
+def test_agent_completion_streams_native_tool_call_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    chunks = [SimpleNamespace(choices=[])]
+
+    class FakeCompletions:
+        def create(self, **kwargs: object) -> list[object]:
+            captured.update(kwargs)
+            return chunks
+
+    class FakeClient:
+        def __init__(self, **kwargs: str) -> None:
+            captured.update(kwargs)
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(llm, "OpenAI", FakeClient)
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+
+    assert list(
+        llm.stream_agent_completion(
+            [{"role": "user", "content": "Find my garden notes."}],
+            TOOL_DEFINITIONS,
+        )
+    ) == chunks
+    assert captured["tools"] == TOOL_DEFINITIONS
+    assert captured["tool_choice"] == "auto"
+    assert captured["stream"] is True

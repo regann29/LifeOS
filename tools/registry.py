@@ -18,7 +18,7 @@ TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
         "type": "function",
         "function": {
             "name": "notes_search",
-            "description": "Search the user's local notes for matching keywords.",
+            "description": "Read-only: search the user's local notes for matching keywords.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "Words to search for."}},
@@ -48,7 +48,7 @@ TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web for current information.",
+            "description": "Read-only: search the web for current information; sends the query to Tavily.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "Search query."}},
