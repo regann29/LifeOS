@@ -2,7 +2,7 @@
 
 LifeOS is a personal AI helper designed to remember what matters to you, learn routines, and help with everyday tasks while keeping you in control. It aims to address a common frustration with assistants: they often forget you between chats, and using them means sending text to a model provider.
 
-This build provides a streaming Nemotron chat in a browser and a command-line chat. It can remember useful details between sessions in readable files you can inspect and change. Tools, skills, approvals, redaction, and the morning brief are not implemented yet.
+This build provides a streaming Nemotron chat, editable file-based memory, and three user-controlled tools: local notes search, task management, and web search. Changes to tasks pause for your approval. Saved skills, private-data redaction, and a morning brief are not implemented yet.
 
 ## Run it in 5 minutes
 
@@ -27,7 +27,7 @@ You need Python 3.11 or newer and an API key for Nebius Token Factory.
    Copy-Item .env.example .env
    ```
 
-   The example uses Nebius by default. For NVIDIA NIM development, edit the three `LLM_*` values to the commented NVIDIA settings.
+   The example uses Nebius by default. For NVIDIA NIM development, edit the three `LLM_*` values to the commented NVIDIA settings. Web search also needs a Tavily key in `TAVILY_API_KEY`.
 
 4. Start LifeOS:
 
@@ -51,9 +51,15 @@ Open the Memory panel to read, add, edit, or delete a line. LifeOS suggests poss
 
 The demo starts with fictional sample memories. Files for other users are local data and are not intended to be committed.
 
+## Tools and approvals
+
+LifeOS has three tools: it searches local notes, lists or changes your task list, and searches the web with Tavily. Reading notes, listing tasks, and web search do not change local files. Adding or completing a task pauses until you choose **Approve** or **Deny**. The CLI asks the same question with a y/n prompt.
+
+The Activity log records each tool call, its input, whether it was approved, and its result in a local JSON file. Web search sends its query to Tavily. The conversation is sent to the configured Nemotron provider.
+
 ## Privacy, in plain words
 
-Your memory files are readable and editable on the machine running LifeOS. The chat and the conversation used to suggest memories are sent to the model provider configured in `.env` so it can answer or suggest what you might want to remember. This build does not yet redact private details. Do not enter passwords, API keys, or other sensitive information.
+Your memory, notes, task list, and activity log are local readable files. Chat and the conversation used to suggest memories are sent to the model provider configured in `.env`. A web search sends its query to Tavily. This build does not yet redact private details. Do not enter passwords, API keys, or other sensitive information.
 
 The app reads API keys from environment variables (or your local `.env` file). Keep `.env` private; it is excluded from Git.
 
