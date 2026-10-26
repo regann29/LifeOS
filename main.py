@@ -2,7 +2,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator, Iterator
-from typing import AsyncIterator, Literal
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -18,6 +18,7 @@ from memory.proposals import MemoryProposal, extract_proposals
 from tools.activity import list_activity
 
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
