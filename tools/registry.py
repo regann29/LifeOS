@@ -1,5 +1,5 @@
 import json
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 from openai.types.chat import ChatCompletionToolParam
 
@@ -9,8 +9,24 @@ from tools.web_search import search_web
 
 
 class ToolPlan(TypedDict):
-    risk: bool
+    risk: Literal["read", "write"]
     description: str
+
+
+TOOL_METADATA: dict[str, dict[str, str]] = {
+    "notes_search": {
+        "description": "Search local text and Markdown notes by keyword.",
+        "risk": "read",
+    },
+    "tasks": {
+        "description": "List tasks, add a task, or mark a task complete.",
+        "risk": "read or write depending on action",
+    },
+    "web_search": {
+        "description": "Search the web using Tavily.",
+        "risk": "read",
+    },
+}
 
 
 TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
@@ -18,7 +34,7 @@ TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
         "type": "function",
         "function": {
             "name": "notes_search",
-            "description": "Read-only: search the user's local notes for matching keywords.",
+            "description": f"{TOOL_METADATA['notes_search']['description']} Risk: read-only.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "Words to search for."}},
@@ -31,7 +47,10 @@ TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
         "type": "function",
         "function": {
             "name": "tasks",
-            "description": "List tasks, add a task, or mark a task complete. Adding or completing changes saved tasks and needs approval.",
+            "description": (
+                f"{TOOL_METADATA['tasks']['description']} "
+                "Listing is read-only. Adding or completing writes data and requires approval."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -48,7 +67,10 @@ TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Read-only: search the web for current information; sends the query to Tavily.",
+            "description": (
+                f"{TOOL_METADATA['web_search']['description']} "
+                "Read-only. The search query is sent to Tavily."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "Search query."}},
@@ -73,30 +95,30 @@ def prepare_tool(name: str, arguments: dict[str, Any]) -> ToolPlan:
         if set(arguments) != allowed:
             raise ValueError("notes_search requires only a query.")
         query = _argument_string(arguments, "query")
-        return {"risk": False, "description": f"Search local notes for: {query}"}
+        return {"risk": "read", "description": f"Search local notes for: {query}"}
 
     if name == "web_search":
         if set(arguments) != {"query"}:
             raise ValueError("web_search requires only a query.")
         query = _argument_string(arguments, "query")
-        return {"risk": False, "description": f"Search the web for: {query}"}
+        return {"risk": "read", "description": f"Search the web for: {query}"}
 
     if name == "tasks":
         action = _argument_string(arguments, "action")
         if action == "list":
             if set(arguments) != {"action"}:
                 raise ValueError("Listing tasks accepts only the action.")
-            return {"risk": False, "description": "List saved tasks"}
+            return {"risk": "read", "description": "List saved tasks"}
         if action == "add":
             if set(arguments) != {"action", "title"}:
                 raise ValueError("Adding a task requires action and title.")
             title = _argument_string(arguments, "title")
-            return {"risk": True, "description": f"Add task: {title}"}
+            return {"risk": "write", "description": f"Add task: {title}"}
         if action == "complete":
             if set(arguments) != {"action", "task_id"}:
                 raise ValueError("Completing a task requires action and task_id.")
             task_id = _argument_string(arguments, "task_id")
-            return {"risk": True, "description": f"Mark task {task_id} complete"}
+            return {"risk": "write", "description": f"Mark task {task_id} complete"}
         raise ValueError("Task action must be list, add, or complete.")
 
     raise ValueError(f"Unknown tool: {name}")
@@ -104,7 +126,7 @@ def prepare_tool(name: str, arguments: dict[str, Any]) -> ToolPlan:
 
 def execute_tool(name: str, arguments: dict[str, Any], allow_risky: bool = False) -> Any:
     plan = prepare_tool(name, arguments)
-    if plan["risk"] and not allow_risky:
+    if plan["risk"] == "write" and not allow_risky:
         raise ValueError("This tool changes data and must be explicitly approved first.")
     if name == "notes_search":
         return search_notes(_argument_string(arguments, "query"))
