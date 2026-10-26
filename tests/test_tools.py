@@ -48,7 +48,12 @@ def test_risky_task_waits_for_approval_and_logs_result() -> None:
     messages = [{"role": "user", "content": "Add a garden task."}]
     events = list(agent_events(messages, _completion_with_task_call))
 
-    assert events[0]["type"] == "approval_required"
+    assert events[0] == {
+        "type": "tool_step",
+        "tool": "tasks",
+        "label": "Checking your task list...",
+    }
+    assert events[1]["type"] == "approval_required"
     assert list_tasks() == []
     assert activity.list_activity() == []
 
