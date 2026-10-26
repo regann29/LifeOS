@@ -3,6 +3,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -35,6 +36,7 @@ class PendingApproval:
 
 
 _pending_approvals: dict[str, PendingApproval] = {}
+_pending_lock = Lock()
 
 
 def _progress_label(name: str) -> str:
@@ -143,6 +145,21 @@ def _stream_agent(
             call_id = str(call.get("id") or f"invalid-{uuid.uuid4().hex}")
             state.tool_steps += 1
             if state.tool_steps > MAX_TOOL_STEPS:
+                try:
+                    blocked_arguments = parse_arguments(function.get("arguments", ""))
+                except (ValueError, json.JSONDecodeError):
+                    blocked_arguments = {"raw_arguments": function.get("arguments", "")}
+                try:
+                    blocked_risk = prepare_tool(name, blocked_arguments)["risk"] == "write"
+                except ValueError:
+                    blocked_risk = name == "tasks" and blocked_arguments.get("action") in {"add", "complete"}
+                log_tool_call(
+                    name,
+                    blocked_arguments,
+                    blocked_risk,
+                    False,
+                    {"error": "The five-tool-step limit was reached."},
+                )
                 yield {
                     "type": "delta",
                     "text": "I stopped because this request reached the five-tool-step limit.",
@@ -189,16 +206,17 @@ def _stream_agent(
                     continue
                 approval_id = uuid.uuid4().hex
                 now = _clock()
-                for old_id, pending in list(_pending_approvals.items()):
-                    if pending.expires_at <= now:
-                        del _pending_approvals[old_id]
-                _pending_approvals[approval_id] = PendingApproval(
-                    approval_id=approval_id,
-                    state=state,
-                    tool_calls=tool_calls,
-                    call_index=call_index,
-                    expires_at=now + APPROVAL_TTL_SECONDS,
-                )
+                with _pending_lock:
+                    for old_id, pending in list(_pending_approvals.items()):
+                        if pending.expires_at <= now:
+                            del _pending_approvals[old_id]
+                    _pending_approvals[approval_id] = PendingApproval(
+                        approval_id=approval_id,
+                        state=state,
+                        tool_calls=tool_calls,
+                        call_index=call_index,
+                        expires_at=now + APPROVAL_TTL_SECONDS,
+                    )
                 yield {
                     "type": "approval_required",
                     "approval_id": approval_id,
@@ -233,7 +251,8 @@ def resume_approval(
     approved: bool,
     complete: Any = stream_agent_completion,
 ):
-    pending = _pending_approvals.pop(approval_id, None)
+    with _pending_lock:
+        pending = _pending_approvals.pop(approval_id, None)
     if pending is None:
         raise RuntimeError("This approval is no longer available.")
 
