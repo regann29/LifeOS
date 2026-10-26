@@ -18,7 +18,6 @@ const activityNotice = document.querySelector("#activity-notice");
 const conversation = [];
 let proposals = [];
 let memoryData = [];
-let approvalPending = false;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -135,7 +134,6 @@ function addApprovalCard(approval, answerElement) {
       }
       if (!result.completed) throw new Error("The response stream ended unexpectedly.");
       conversation.push({ role: "assistant", content: answerElement.textContent || "" });
-      approvalPending = false;
       sendButton.disabled = false;
       endSessionButton.disabled = false;
       card.remove();
@@ -402,7 +400,6 @@ form.addEventListener("submit", async (event) => {
     answer = result.answer;
     if (result.approval) {
       waitingForApproval = true;
-      approvalPending = true;
       addApprovalCard(result.approval, answerElement);
       notice.textContent = "A task change is paused until you approve or deny it.";
       return;
