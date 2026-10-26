@@ -6,7 +6,7 @@ This build provides a streaming Nemotron chat, editable file-based memory, and t
 
 ## Run it in 5 minutes
 
-You need Python 3.11 or newer and an API key for Nebius Token Factory.
+You need Python 3.11 or newer and an API key for NVIDIA NIM or Nebius Token Factory.
 
 1. In a terminal, go to the project folder and create an environment:
 
@@ -21,13 +21,13 @@ You need Python 3.11 or newer and an API key for Nebius Token Factory.
    pip install -r requirements.txt
    ```
 
-3. Copy `.env.example` to `.env` and replace the placeholder with your Nebius Token Factory API key:
+3. Copy `.env.example` to `.env` and replace the placeholder with your provider's API key:
 
    ```powershell
    Copy-Item .env.example .env
    ```
 
-   The example uses Nebius by default. For NVIDIA NIM development, edit the three `LLM_*` values to the commented NVIDIA settings. Web search also needs a Tavily key in `TAVILY_API_KEY`.
+   The example uses NVIDIA NIM and Nemotron. For Nebius, set `LLM_PROVIDER=nebius`, then copy the exact base URL, model name, and settings from the Nebius Token Factory console; the values can vary by model. Keep the key only in `.env`. Web search also needs a Tavily key in `TAVILY_API_KEY`.
 
 4. Start LifeOS:
 
@@ -36,6 +36,9 @@ You need Python 3.11 or newer and an API key for Nebius Token Factory.
    ```
 
 5. Open <http://127.0.0.1:8000> and send a message. To use the command-line chat instead, run `python cli.py`.
+
+To check the model connection without starting the app, run `python scripts/check_llm.py`.
+Reasoning is hidden by default in the web chat; use **Show thinking** to expand it when the model returns reasoning. Memory suggestions and tool-calling requests run with thinking disabled.
 
 Run the tests with:
 

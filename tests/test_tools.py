@@ -67,7 +67,7 @@ def test_risky_task_waits_for_approval_and_logs_result() -> None:
         )
     )
 
-    assert {"type": "delta", "text": "The task is ready."} in resumed
+    assert {"type": "answer", "text": "The task is ready."} in resumed
     assert resumed[-1]["type"] == "done"
     assert [task["title"] for task in list_tasks()] == ["Plan garden"]
     entry = activity.list_activity()[-1]
@@ -229,7 +229,7 @@ def test_invalid_tool_arguments_retry_once_then_explain() -> None:
 
     assert response_count == 2
     assert "arguments were invalid" in "".join(
-        str(event.get("text", "")) for event in events if event["type"] == "delta"
+        str(event.get("text", "")) for event in events if event["type"] == "answer"
     )
 
 
@@ -243,7 +243,7 @@ def test_agent_caps_tool_steps_across_model_turns() -> None:
 
     events = list(agent_events([{"role": "user", "content": "List tasks repeatedly."}], complete))
     delta_text = "".join(
-        str(event.get("text", "")) for event in events if event["type"] == "delta"
+        str(event.get("text", "")) for event in events if event["type"] == "answer"
     )
 
     assert response_count == 6

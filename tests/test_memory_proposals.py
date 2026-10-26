@@ -32,8 +32,9 @@ def _fake_model(monkeypatch: pytest.MonkeyPatch, responses: list[str]) -> list[d
 
     monkeypatch.setattr(llm, "OpenAI", FakeClient)
     monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "x")
     monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_PROVIDER", "nvidia")
     return requests
 
 
