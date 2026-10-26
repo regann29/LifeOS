@@ -89,6 +89,7 @@ select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-
 .activity-result { margin: 6px 0; max-height: 90px; overflow: auto; overflow-wrap: anywhere; color: #60675d; font-size: 10px; line-height: 1.4; }
 .activity-entry time { color: #989b91; font-size: 9px; }
 .approval-card { max-width: 92%; padding: 14px; border: 1px solid #d5c69f; border-radius: 12px; background: #fffaf0; }
+.tool-progress { align-self: flex-start; margin: -12px 0 0; color: #899083; font-size: 11px; font-style: italic; }
 .approval-description { margin: 0 0 8px; font-size: 13px; line-height: 1.5; }
 .approval-tool { margin: 0 0 12px; color: #686c60; font: 10px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
 .approval-card .proposal-actions { gap: 10px; }

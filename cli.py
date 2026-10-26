@@ -56,6 +56,8 @@ def _run_agent(messages: list[ChatCompletionMessageParam]) -> str:
                 text = str(event["text"])
                 response += text
                 print(text, end="", flush=True)
+            elif event["type"] == "tool_step":
+                print(f"\n{event['label']}", flush=True)
             elif event["type"] == "approval_required":
                 print(
                     f"\n\nApproval needed: {event['description']}\n"

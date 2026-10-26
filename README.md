@@ -51,11 +51,15 @@ Open the Memory panel to read, add, edit, or delete a line. LifeOS suggests poss
 
 The demo starts with fictional sample memories. Files for other users are local data and are not intended to be committed.
 
-## Tools and approvals
+## What LifeOS can do for you
 
-LifeOS has three tools: it searches local notes, lists or changes your task list, and searches the web with Tavily. Reading notes, listing tasks, and web search do not change local files. Adding or completing a task pauses until you choose **Approve** or **Deny**. The CLI asks the same question with a y/n prompt.
+LifeOS can search text and Markdown notes in your own data folder, list or change your task list, and search the web with Tavily. Notes search returns up to five short snippets. Web search returns up to five results. If Tavily is not configured, LifeOS explains how to enable it instead of crashing. Tool progress appears in the chat as it happens.
 
-The Activity log records each tool call, its input, whether it was approved, and its result in a local JSON file. Web search sends its query to Tavily. The conversation is sent to the configured Nemotron provider.
+## How approvals keep you in control
+
+Reading notes, listing tasks, and web search do not change your files. Adding or completing a task pauses until you see the exact action and choose **Approve** or **Deny**. Approvals expire after two minutes. The CLI asks the same question with a y/n prompt. A denied action is not repeated.
+
+The Activity log records every tool call, its input, whether it was approved, and a short result in `data/<user>/activity.jsonl`. Notes, tasks, and the activity log stay inside that user's data folder. Web search sends its query to Tavily. The conversation is sent to the configured Nemotron provider.
 
 ## Privacy, in plain words
 

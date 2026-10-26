@@ -5,11 +5,13 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+import core.agent as agent
 from core.agent import agent_events, resume_approval
 from main import app
 from memory import manager
 from tools import activity
-from tools.registry import TOOL_DEFINITIONS, execute_tool, prepare_tool
+from tools.registry import TOOL_DEFINITIONS, TOOL_METADATA, execute_tool, prepare_tool
+from tools.notes_search import search_notes
 from tools.tasks import list_tasks
 from tools import web_search
 
@@ -50,7 +52,8 @@ def test_risky_task_waits_for_approval_and_logs_result() -> None:
     assert list_tasks() == []
     assert activity.list_activity() == []
 
-    approval_id = str(events[0]["approval_id"])
+    approval_event = next(event for event in events if event["type"] == "approval_required")
+    approval_id = str(approval_event["approval_id"])
     resumed = list(
         resume_approval(
             approval_id,
@@ -72,7 +75,7 @@ def test_risky_task_waits_for_approval_and_logs_result() -> None:
 def test_denied_task_is_not_executed_and_is_logged() -> None:
     messages = [{"role": "user", "content": "Add a garden task."}]
     events = list(agent_events(messages, _completion_with_task_call))
-    approval_id = str(events[0]["approval_id"])
+    approval_id = str(next(event for event in events if event["type"] == "approval_required")["approval_id"])
 
     resumed = list(resume_approval(approval_id, False, complete=_completion_final))
 
@@ -83,12 +86,12 @@ def test_denied_task_is_not_executed_and_is_logged() -> None:
 
 
 def test_task_mutations_are_risky_but_listing_is_not() -> None:
-    assert prepare_tool("tasks", {"action": "list"})["risk"] is False
-    assert prepare_tool("tasks", {"action": "add", "title": "Read"})["risk"] is True
+    assert prepare_tool("tasks", {"action": "list"})["risk"] == "read"
+    assert prepare_tool("tasks", {"action": "add", "title": "Read"})["risk"] == "write"
     assert prepare_tool(
         "tasks",
         {"action": "complete", "task_id": "seed-001"},
-    )["risk"] is True
+    )["risk"] == "write"
     with pytest.raises(ValueError, match="approved"):
         execute_tool("tasks", {"action": "add", "title": "Read"})
 
@@ -100,12 +103,43 @@ def test_notes_search_reads_local_notes_only() -> None:
 
     matches = execute_tool("notes_search", {"query": "basil"})
 
-    assert matches == [{"file": "garden.md", "line": "1", "text": "Plant basil near the window."}]
+    assert matches == [
+        {
+            "file": "garden.md",
+            "line": "1",
+            "snippet": "Plant basil near the window.",
+        }
+    ]
+
+
+def test_notes_search_returns_only_five_short_snippets() -> None:
+    notes = manager.user_data_dir() / "notes"
+    notes.mkdir()
+    long_line = "basil " + ("garden " * 80)
+    (notes / "garden.md").write_text("\n".join([long_line] * 8), encoding="utf-8")
+
+    matches = search_notes("basil")
+
+    assert len(matches) == 5
+    assert all(len(match["snippet"]) <= 220 for match in matches)
+    assert all("snippet" in match and "text" not in match for match in matches)
+
+
+def test_user_folder_rejects_traversal(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LIFEOS_USER", "..\\other-user")
+
+    with pytest.raises(ValueError, match="LIFEOS_USER"):
+        execute_tool("tasks", {"action": "list"})
 
 
 def test_registry_exposes_exactly_three_native_tools() -> None:
     names = [item["function"]["name"] for item in TOOL_DEFINITIONS]
     assert names == ["notes_search", "tasks", "web_search"]
+    assert [TOOL_METADATA[name]["risk"] for name in names] == [
+        "read",
+        "read or write depending on action",
+        "read",
+    ]
 
 
 def test_web_search_uses_tavily_and_returns_limited_fields(
@@ -142,7 +176,7 @@ def test_web_search_uses_tavily_and_returns_limited_fields(
         {
             "title": "Garden guide",
             "url": "https://example.test/garden",
-            "content": "Useful result",
+            "summary": "Useful result",
         }
     ]
 
@@ -151,8 +185,87 @@ def test_web_search_reports_missing_tavily_key(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(web_search, "load_dotenv", lambda: None)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
-        web_search.search_web("garden planning")
+    assert web_search.search_web("garden planning") == [
+        {
+            "title": "Web search is not set up",
+            "url": "",
+            "summary": "Add TAVILY_API_KEY to your local .env file to enable web search.",
+        }
+    ]
+
+
+def test_invalid_tool_arguments_retry_once_then_explain() -> None:
+    response_count = 0
+
+    def complete(_messages, _tools):
+        nonlocal response_count
+        response_count += 1
+        return [_chunk(tool_call=_tool_call("notes_search", '{"unexpected":"field"}'))]
+
+    events = list(agent_events([{"role": "user", "content": "Search my notes."}], complete))
+
+    assert response_count == 2
+    assert "arguments were invalid" in "".join(
+        str(event.get("text", "")) for event in events if event["type"] == "delta"
+    )
+
+
+def test_agent_caps_tool_steps_across_model_turns() -> None:
+    response_count = 0
+
+    def complete(_messages, _tools):
+        nonlocal response_count
+        response_count += 1
+        return [_chunk(tool_call=_tool_call("tasks", '{"action":"list"}'))]
+
+    events = list(agent_events([{"role": "user", "content": "List tasks repeatedly."}], complete))
+    delta_text = "".join(
+        str(event.get("text", "")) for event in events if event["type"] == "delta"
+    )
+
+    assert response_count == 6
+    assert delta_text == "I stopped because this request reached the five-tool-step limit."
+    assert len(activity.list_activity()) == 5
+
+
+def test_approval_expires_after_two_minutes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [10.0]
+    monkeypatch.setattr(agent, "_clock", lambda: clock[0])
+    events = list(agent_events(
+        [{"role": "user", "content": "Add a garden task."}],
+        _completion_with_task_call,
+    ))
+    approval_id = str(next(event for event in events if event["type"] == "approval_required")["approval_id"])
+    clock[0] = 131.0
+
+    resumed = list(resume_approval(approval_id, True, complete=_completion_final))
+
+    assert list_tasks() == []
+    assert activity.list_activity()[-1]["approved"] is False
+    assert "expired" in activity.list_activity()[-1]["result"]
+    assert resumed[-1]["type"] == "done"
+
+
+def test_denied_action_is_not_retried(
+) -> None:
+    response_count = 0
+
+    def complete(_messages, _tools):
+        nonlocal response_count
+        response_count += 1
+        if response_count <= 2:
+            return [_chunk(tool_call=_tool_call("tasks", '{"action":"add","title":"Plan garden"}'))]
+        return [_chunk(text="I will leave it unchanged.")]
+
+    events = list(agent_events([{"role": "user", "content": "Add a garden task."}], complete))
+    approval_id = str(next(event for event in events if event["type"] == "approval_required")["approval_id"])
+    resumed = list(resume_approval(approval_id, False, complete=complete))
+
+    assert not any(event["type"] == "approval_required" for event in resumed)
+    assert list_tasks() == []
+    assert resumed[-1]["type"] == "done"
 
 
 def test_chat_and_approval_endpoints_stream_agent_events(

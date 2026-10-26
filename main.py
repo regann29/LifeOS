@@ -96,6 +96,9 @@ def chat(request: ChatRequest) -> StreamingResponse:
                 yield json.dumps(event, ensure_ascii=False) + "\n"
         except RuntimeError as error:
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+        except (OSError, ValueError) as error:
+            logger.exception("A local tool or activity log operation failed")
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
         except OpenAIError:
             logger.exception("The model provider request failed")
             yield json.dumps(
@@ -119,6 +122,9 @@ def decide_approval(decision: ApprovalDecision) -> StreamingResponse:
             for event in resume_approval(decision.approval_id, decision.approved):
                 yield json.dumps(event, ensure_ascii=False) + "\n"
         except RuntimeError as error:
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+        except (OSError, ValueError) as error:
+            logger.exception("A local tool or activity log operation failed after approval")
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
         except OpenAIError:
             logger.exception("The model provider request failed after tool approval")

@@ -72,6 +72,12 @@ async function readAgentStream(response, answerElement) {
         answer += eventData.text;
         answerElement.textContent = answer;
         messagesElement.scrollTop = messagesElement.scrollHeight;
+      } else if (eventData.type === "tool_step") {
+        const progress = document.createElement("p");
+        progress.className = "tool-progress";
+        progress.textContent = eventData.label;
+        messagesElement.append(progress);
+        messagesElement.scrollTop = messagesElement.scrollHeight;
       } else if (eventData.type === "error") {
         throw new Error(eventData.message);
       } else if (eventData.type === "approval_required") {
