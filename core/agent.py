@@ -22,6 +22,7 @@ class AgentState:
     messages: list[dict[str, Any]]
     tool_steps: int = 0
     invalid_attempts: dict[str, int] = field(default_factory=dict)
+    denied_actions: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -58,6 +59,10 @@ def _append_tool_result(
     )
 
 
+def _action_key(name: str, arguments: dict[str, Any]) -> str:
+    return f"{name}:{json.dumps(arguments, sort_keys=True, ensure_ascii=False)}"
+
+
 def _tool_error(
     state: AgentState,
     call: dict[str, Any],
@@ -72,7 +77,7 @@ def _tool_error(
         plan = prepare_tool(name, arguments)
         risk = plan["risk"] == "write"
     except ValueError:
-        risk = False
+        risk = name == "tasks" and arguments.get("action") in {"add", "complete"}
     log_tool_call(name, arguments, risk, False, {"error": message})
     call_id = str(call.get("id", "invalid-call"))
     if attempts >= 2:
@@ -175,6 +180,13 @@ def _stream_agent(
 
             state.invalid_attempts.pop(name, None)
             if plan["risk"] == "write":
+                action_key = _action_key(name, arguments)
+                if action_key in state.denied_actions:
+                    denied = {"denied": True, "reason": "This action was already denied."}
+                    log_tool_call(name, arguments, True, False, denied)
+                    _append_tool_result(state, call_id, denied)
+                    call_index += 1
+                    continue
                 approval_id = uuid.uuid4().hex
                 now = _clock()
                 for old_id, pending in list(_pending_approvals.items()):
@@ -245,6 +257,8 @@ def resume_approval(
     else:
         result = {"denied": True}
 
+    if not approved:
+        pending.state.denied_actions.add(_action_key(name, arguments))
     log_tool_call(name, arguments, True, approved, result)
     _append_tool_result(
         pending.state,
