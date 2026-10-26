@@ -3,8 +3,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
 from core.agent import agent_events, resume_approval
+from main import app
 from memory import manager
 from tools import activity
 from tools.registry import TOOL_DEFINITIONS, execute_tool, prepare_tool
@@ -151,3 +153,34 @@ def test_web_search_reports_missing_tavily_key(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
         web_search.search_web("garden planning")
+
+
+def test_chat_and_approval_endpoints_stream_agent_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "main.agent_events",
+        lambda messages: iter([{"type": "approval_required", "approval_id": "a" * 32}]),
+    )
+    monkeypatch.setattr(
+        "main.resume_approval",
+        lambda approval_id, approved: iter([{"type": "done"}]),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Add a task."}]},
+    )
+    assert response.status_code == 200
+    assert json.loads(response.text) == {
+        "type": "approval_required",
+        "approval_id": "a" * 32,
+    }
+
+    decision = client.post(
+        "/api/approval",
+        json={"approval_id": "a" * 32, "approved": False},
+    )
+    assert decision.status_code == 200
+    assert json.loads(decision.text) == {"type": "done"}
