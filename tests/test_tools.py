@@ -22,9 +22,15 @@ def isolated_tool_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIFEOS_USER", "tool-test")
 
 
-def _chunk(*, text: str | None = None, tool_call: object | None = None) -> object:
+def _chunk(
+    *,
+    text: str | None = None,
+    reasoning: str | None = None,
+    tool_call: object | None = None,
+) -> object:
     delta = SimpleNamespace(
         content=text,
+        reasoning_content=reasoning,
         tool_calls=[tool_call] if tool_call is not None else None,
     )
     choice = SimpleNamespace(delta=delta, finish_reason=None)
@@ -289,6 +295,32 @@ def test_denied_action_is_not_retried(
     assert not any(event["type"] == "approval_required" for event in resumed)
     assert list_tasks() == []
     assert resumed[-1]["type"] == "done"
+
+
+def test_final_answer_stream_separates_reasoning_and_answer() -> None:
+    received_messages: list[dict[str, object]] = []
+
+    def route_without_tools(_messages, _tools):
+        return [_chunk(text="Discarded router text.", reasoning="Not used.")]
+
+    def answer_stream(messages):
+        received_messages.extend(messages)
+        yield {"type": "reasoning", "text": "Private reasoning"}
+        yield {"type": "answer", "text": "Final answer"}
+
+    state = agent.AgentState(
+        messages=[{"role": "user", "content": "Hello"}],
+        answer_stream=answer_stream,
+    )
+
+    events = list(agent._stream_agent(state, route_without_tools))
+
+    assert events == [
+        {"type": "reasoning", "text": "Private reasoning"},
+        {"type": "answer", "text": "Final answer"},
+        {"type": "done"},
+    ]
+    assert "Not used." not in str(received_messages)
 
 
 def test_chat_and_approval_endpoints_stream_agent_events(

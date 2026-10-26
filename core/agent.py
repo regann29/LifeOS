@@ -8,7 +8,7 @@ from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
-from core.llm import stream_agent_completion
+from core.llm import stream_agent_completion, stream_chat
 from tools.activity import log_tool_call
 from tools.registry import TOOL_DEFINITIONS, execute_tool, parse_arguments, prepare_tool
 
@@ -21,6 +21,7 @@ _clock = time.monotonic
 @dataclass
 class AgentState:
     messages: list[dict[str, Any]]
+    answer_stream: Any | None = None
     tool_steps: int = 0
     invalid_attempts: dict[str, int] = field(default_factory=dict)
     denied_actions: set[str] = field(default_factory=set)
@@ -102,17 +103,17 @@ def _stream_agent(
         if tool_calls is None:
             gathered: dict[int, dict[str, Any]] = {}
             content = ""
+            reasoning_parts: list[str] = []
             for chunk in complete(state.messages, TOOL_DEFINITIONS):
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
                 reasoning = getattr(delta, "reasoning_content", None)
                 if isinstance(reasoning, str) and reasoning:
-                    yield {"type": "reasoning", "text": reasoning}
+                    reasoning_parts.append(reasoning)
                 text = getattr(delta, "content", None)
                 if isinstance(text, str) and text:
                     content += text
-                    yield {"type": "answer", "text": text}
                 for partial in getattr(delta, "tool_calls", None) or []:
                     index = partial.index
                     call = gathered.setdefault(
@@ -128,6 +129,14 @@ def _stream_agent(
                         call["function"]["arguments"] += function.arguments
 
             if not gathered:
+                if state.answer_stream is not None:
+                    for event in state.answer_stream(state.messages):
+                        yield event
+                else:
+                    for reasoning in reasoning_parts:
+                        yield {"type": "reasoning", "text": reasoning}
+                    if content:
+                        yield {"type": "answer", "text": content}
                 yield {"type": "done"}
                 return
 
@@ -245,7 +254,11 @@ def agent_events(
     messages: list[ChatCompletionMessageParam],
     complete: Any = stream_agent_completion,
 ):
-    state = AgentState(messages=[dict(message) for message in messages])
+    answer_stream = stream_chat if complete is stream_agent_completion else None
+    state = AgentState(
+        messages=[dict(message) for message in messages],
+        answer_stream=answer_stream,
+    )
     yield from _stream_agent(state, complete)
 
 
