@@ -13,14 +13,19 @@ class ToolPlan(TypedDict):
     description: str
 
 
-TOOL_METADATA: dict[str, dict[str, str]] = {
+class ToolMetadata(TypedDict):
+    description: str
+    risk: Literal["read", "write"] | dict[str, Literal["read", "write"]]
+
+
+TOOL_METADATA: dict[str, ToolMetadata] = {
     "notes_search": {
         "description": "Search local text and Markdown notes by keyword.",
         "risk": "read",
     },
     "tasks": {
         "description": "List tasks, add a task, or mark a task complete.",
-        "risk": "read or write depending on action",
+        "risk": {"list": "read", "add": "write", "complete": "write"},
     },
     "web_search": {
         "description": "Search the web using Tavily.",

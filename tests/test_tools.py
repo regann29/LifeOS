@@ -140,11 +140,29 @@ def test_user_folder_rejects_traversal(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_registry_exposes_exactly_three_native_tools() -> None:
     names = [item["function"]["name"] for item in TOOL_DEFINITIONS]
     assert names == ["notes_search", "tasks", "web_search"]
-    assert [TOOL_METADATA[name]["risk"] for name in names] == [
-        "read",
-        "read or write depending on action",
-        "read",
-    ]
+    assert TOOL_METADATA["notes_search"]["risk"] == "read"
+    assert TOOL_METADATA["tasks"]["risk"] == {
+        "list": "read",
+        "add": "write",
+        "complete": "write",
+    }
+    assert TOOL_METADATA["web_search"]["risk"] == "read"
+
+
+def test_activity_is_appended_as_json_lines() -> None:
+    activity.log_tool_call(
+        "notes_search",
+        {"query": "garden"},
+        risk=False,
+        approved=False,
+        result=[{"file": "garden.md", "snippet": "Plant basil."}],
+    )
+
+    log_path = manager.user_data_dir() / "activity.jsonl"
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["tool"] == "notes_search"
+    assert not (manager.user_data_dir() / "activity.json").exists()
 
 
 def test_web_search_uses_tavily_and_returns_limited_fields(
@@ -230,7 +248,7 @@ def test_agent_caps_tool_steps_across_model_turns() -> None:
 
     assert response_count == 6
     assert delta_text == "I stopped because this request reached the five-tool-step limit."
-    assert len(activity.list_activity()) == 5
+    assert len(activity.list_activity()) == 6
 
 
 def test_approval_expires_after_two_minutes(

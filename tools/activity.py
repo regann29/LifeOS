@@ -16,6 +16,34 @@ class ActivityEntry(TypedDict):
     result: str
 
 
+def _result_summary(result: object) -> str:
+    if isinstance(result, list):
+        preview: list[object] = []
+        for item in result[:2]:
+            if isinstance(item, dict):
+                preview.append(
+                    {
+                        key: item[key]
+                        for key in ("title", "file", "snippet", "id", "done")
+                        if key in item
+                    }
+                )
+            else:
+                preview.append(item)
+        return json.dumps(
+            {"count": len(result), "preview": preview},
+            ensure_ascii=False,
+        )
+
+    serialized = json.dumps(result, ensure_ascii=False)
+    if len(serialized) <= 600:
+        return serialized
+    return json.dumps(
+        {"summary": serialized[:597] + "...", "truncated": True},
+        ensure_ascii=False,
+    )
+
+
 def _activity_path() -> Path:
     path = user_data_dir() / "activity.jsonl"
     if path.is_symlink() or not path.resolve().is_relative_to(path.parent):
@@ -52,7 +80,7 @@ def log_tool_call(
         "input": arguments,
         "risk": risk,
         "approved": approved,
-        "result": json.dumps(result, ensure_ascii=False),
+        "result": _result_summary(result),
     }
     with path.open("a", encoding="utf-8") as activity_file:
         activity_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
