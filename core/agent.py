@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionToolParam
 
 from core.llm import stream_agent_completion
 from tools.activity import log_tool_call
@@ -15,7 +16,7 @@ from tools.registry import TOOL_DEFINITIONS, execute_tool, parse_arguments, prep
 logger = logging.getLogger(__name__)
 _pending_lock = Lock()
 CallableCompletion = Callable[
-    [Sequence[ChatCompletionMessageParam], list[dict[str, Any]]],
+    [Sequence[ChatCompletionMessageParam], list[ChatCompletionToolParam]],
     Iterable[ChatCompletionChunk],
 ]
 

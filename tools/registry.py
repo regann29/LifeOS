@@ -1,6 +1,8 @@
 import json
 from typing import Any, TypedDict
 
+from openai.types.chat import ChatCompletionToolParam
+
 from tools.notes_search import search_notes
 from tools.tasks import add_task, complete_task, list_tasks
 from tools.web_search import search_web
@@ -11,7 +13,7 @@ class ToolPlan(TypedDict):
     description: str
 
 
-TOOL_DEFINITIONS: list[dict[str, Any]] = [
+TOOL_DEFINITIONS: list[ChatCompletionToolParam] = [
     {
         "type": "function",
         "function": {

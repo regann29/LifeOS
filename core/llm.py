@@ -3,8 +3,7 @@ from collections.abc import Iterator, Sequence
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from openai.types.chat import ChatCompletionChunk
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam, ChatCompletionToolParam
 
 
 def stream_chat(
@@ -44,7 +43,7 @@ def stream_chat(
 
 def stream_agent_completion(
     messages: Sequence[ChatCompletionMessageParam],
-    tools: list[dict[str, object]],
+    tools: list[ChatCompletionToolParam],
 ) -> Iterator[ChatCompletionChunk]:
     load_dotenv()
     base_url = os.getenv("LLM_BASE_URL")
