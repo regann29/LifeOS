@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from openai import OpenAIError
 from pydantic import BaseModel, Field
 
-from core.llm import friendly_provider_error, stream_answer, validate_llm_configuration
+from core.llm import friendly_provider_error, stream_strict_answer, validate_llm_configuration
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory import manager
@@ -197,7 +197,7 @@ def delete_memory(change: MemoryLineReference) -> dict[str, bool]:
 def end_session(request: ChatRequest) -> dict[str, object]:
     messages = [message.model_dump() for message in request.messages]
     try:
-        proposals = extract_proposals(messages, stream_answer)
+        proposals = extract_proposals(messages, stream_strict_answer)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except OpenAIError as error:

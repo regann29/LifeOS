@@ -103,7 +103,7 @@ def test_end_session_uses_model_suggestions_without_saving(
             '"reason":"The user stated this."}]'
         )
 
-    monkeypatch.setattr("main.stream_chat", fake_stream)
+    monkeypatch.setattr("main.stream_strict_answer", fake_stream)
     result = end_session(
         ChatRequest(messages=[ChatMessage(role="user", content="I like gardening.")])
     )

@@ -44,12 +44,16 @@ def test_invalid_json_retries_once_then_returns_no_proposals(
 
     proposals = extract_proposals(
         [{"role": "user", "content": "I like gardening."}],
-        llm.stream_chat,
+        llm.stream_strict_answer,
     )
 
     assert proposals == []
     assert len(requests) == 2
     assert all(request["stream"] is True for request in requests)
+    assert all(
+        request["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+        for request in requests
+    )
 
 
 def test_invalid_json_retries_and_accepts_a_valid_response(
@@ -63,7 +67,7 @@ def test_invalid_json_retries_and_accepts_a_valid_response(
 
     proposals = extract_proposals(
         [{"role": "user", "content": "Please keep answers short."}],
-        llm.stream_chat,
+        llm.stream_strict_answer,
     )
 
     assert proposals == [

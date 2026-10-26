@@ -1,7 +1,7 @@
 from openai import OpenAIError
 from openai.types.chat import ChatCompletionMessageParam
 
-from core.llm import friendly_provider_error, stream_answer
+from core.llm import friendly_provider_error, stream_strict_answer
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory.manager import add
@@ -19,7 +19,7 @@ def _end_session(
     if not conversation:
         print("Nothing to save.")
         return _new_session()
-    proposals = extract_proposals(conversation, stream_answer)
+    proposals = extract_proposals(conversation, stream_strict_answer)
     if not proposals:
         print("Nothing to save.")
         return _new_session()
@@ -96,8 +96,8 @@ def main() -> None:
                 messages = _end_session(messages)
             except RuntimeError as error:
                 print(f"\nLifeOS could not review this session: {error}")
-                except OpenAIError as error:
-                    print(f"\nLifeOS could not review this session: {friendly_provider_error(error)}")
+            except OpenAIError as error:
+                print(f"\nLifeOS could not review this session: {friendly_provider_error(error)}")
             continue
         if not text:
             continue

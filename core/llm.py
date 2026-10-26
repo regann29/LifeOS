@@ -190,6 +190,12 @@ def stream_answer(
             yield event["text"]
 
 
+def stream_strict_answer(
+    messages: Sequence[ChatCompletionMessageParam],
+) -> Iterator[str]:
+    yield from stream_answer(messages, enable_thinking=False)
+
+
 def stream_agent_completion(
     messages: Sequence[ChatCompletionMessageParam],
     tools: list[ChatCompletionToolParam],

@@ -68,10 +68,12 @@ async function readAgentStream(response, answerElement) {
     for (const line of lines) {
       if (!line) continue;
       const eventData = JSON.parse(line);
-      if (eventData.type === "delta") {
+      if (eventData.type === "answer") {
         answer += eventData.text;
         answerElement.textContent = answer;
         messagesElement.scrollTop = messagesElement.scrollHeight;
+      } else if (eventData.type === "reasoning") {
+        appendReasoning(answerElement, eventData.text);
       } else if (eventData.type === "tool_step") {
         const progress = document.createElement("p");
         progress.className = "tool-progress";
@@ -91,10 +93,31 @@ async function readAgentStream(response, answerElement) {
   if (pending) {
     const eventData = JSON.parse(pending);
     if (eventData.type === "error") throw new Error(eventData.message);
+    if (eventData.type === "answer") {
+      answer += eventData.text;
+      answerElement.textContent = answer;
+    }
+    if (eventData.type === "reasoning") appendReasoning(answerElement, eventData.text);
     if (eventData.type === "approval_required") approval = eventData;
     if (eventData.type === "done") completed = true;
   }
   return { completed, approval, answer };
+}
+
+function appendReasoning(answerElement, text) {
+  const article = answerElement.parentElement;
+  let details = article.querySelector(".reasoning-details");
+  if (!details) {
+    details = document.createElement("details");
+    details.className = "reasoning-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "Show thinking";
+    const content = document.createElement("p");
+    content.className = "reasoning-text";
+    details.append(summary, content);
+    article.append(details);
+  }
+  details.querySelector(".reasoning-text").textContent += text;
 }
 
 function addApprovalCard(approval, answerElement) {
