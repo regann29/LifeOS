@@ -95,20 +95,32 @@ def _save_skill(messages: list[ChatCompletionMessageParam], name: str) -> None:
     proposal = store_proposal(content)
     print("\nReview this skill draft:\n")
     print(content)
-    answer = input("Save, edit, or reject? [y/e/N] ").strip().lower()
+    try:
+        answer = input("Save, edit, or reject? [y/e/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nDraft rejected.")
+        return
     if answer == "e":
         print("Enter edited Markdown, then type .save on its own line. Type .cancel to reject.")
         lines: list[str] = []
-        while True:
-            line = input()
-            if line == ".save":
-                break
-            if line == ".cancel":
-                print("Draft rejected.")
-                return
-            lines.append(line)
+        try:
+            while True:
+                line = input()
+                if line == ".save":
+                    break
+                if line == ".cancel":
+                    print("Draft rejected.")
+                    return
+                lines.append(line)
+        except (EOFError, KeyboardInterrupt):
+            print("\nDraft rejected.")
+            return
         content = "\n".join(lines)
-        answer = input("Save this edited skill? [y/N] ").strip().lower()
+        try:
+            answer = input("Save this edited skill? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nDraft rejected.")
+            return
     if answer not in {"y", "yes"}:
         print("Draft rejected.")
         return

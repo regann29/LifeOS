@@ -38,10 +38,10 @@ def _word_limit(text: str) -> str:
 
 
 def run_morning_brief(generate_text: GenerateText) -> str:
-    profile = manager.read("profile.md")
-    preferences = manager.read("preferences.md")
-    events = _upcoming_events()
-    tasks = [task for task in list_tasks() if not task["done"]]
+    profile = [line[:500] for line in manager.read("profile.md")[:10]]
+    preferences = [line[:500] for line in manager.read("preferences.md")[:10]]
+    events = [line[:500] for line in _upcoming_events()[:10]]
+    tasks = [task for task in list_tasks() if not task["done"]][:20]
     interests = " ".join(profile + preferences).strip()
     search_query = interests[:240] or "practical productivity and weekly planning"
     web_items: list[dict[str, str]] = []
