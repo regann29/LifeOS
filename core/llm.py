@@ -78,6 +78,10 @@ def _settings() -> LLMSettings:
     if _is_placeholder(api_key):
         raise RuntimeError(API_KEY_ERROR)
 
+    provider = os.getenv("LLM_PROVIDER", "nebius").strip().casefold()
+    if provider not in {"nvidia", "nebius"}:
+        raise RuntimeError("LLM_PROVIDER must be one of: nvidia, nebius.")
+
     base_url = os.getenv("LLM_BASE_URL", "").strip()
     model = os.getenv("LLM_MODEL", "").strip()
     if not base_url:
@@ -86,7 +90,7 @@ def _settings() -> LLMSettings:
         raise RuntimeError("LLM_MODEL is missing.")
 
     return LLMSettings(
-        provider=os.getenv("LLM_PROVIDER", "nebius").strip().casefold(),
+        provider=provider,
         base_url=base_url,
         api_key=api_key,
         model=model,
@@ -94,7 +98,9 @@ def _settings() -> LLMSettings:
         max_tokens=min(_positive_integer("LLM_MAX_TOKENS", 4096), hosted.HOSTED_MAX_TOKENS)
         if hosted.is_hosted()
         else _positive_integer("LLM_MAX_TOKENS", 4096),
-        reasoning_budget=_positive_integer("LLM_REASONING_BUDGET", 2048),
+        reasoning_budget=_positive_integer("LLM_REASONING_BUDGET", 2048)
+        if provider == "nvidia"
+        else 2048,
     )
 
 

@@ -109,6 +109,27 @@ def test_nebius_request_omits_nvidia_extra_body(
     assert "extra_body" not in captured
 
 
+def test_nebius_ignores_invalid_nvidia_reasoning_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _setup_fake_client(monkeypatch, [_chunk(content="Hello")], provider="nebius")
+    monkeypatch.setenv("LLM_REASONING_BUDGET", "not-a-number")
+
+    assert list(llm.stream_chat([{"role": "user", "content": "Hi"}])) == [
+        {"type": "answer", "text": "Hello"}
+    ]
+    assert "extra_body" not in captured
+
+
+def test_unknown_provider_has_clear_allowed_values_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup_fake_client(monkeypatch, [], provider="other")
+
+    with pytest.raises(RuntimeError, match="LLM_PROVIDER must be one of: nvidia, nebius"):
+        list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
+
+
 def test_agent_tool_calls_disable_nvidia_thinking(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
