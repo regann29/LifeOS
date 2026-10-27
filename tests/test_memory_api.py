@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from core.prompts import chat_system_prompt
 from main import (
+    app,
     ChatMessage,
     ChatRequest,
     MemoryChange,
