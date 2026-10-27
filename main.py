@@ -17,7 +17,7 @@ from core.prompts import chat_system_prompt
 from briefs.manager import read_brief
 from briefs.scheduler import create_scheduler
 from briefs.service import run_morning_brief
-from skills.manager import Skill, list_skills, load_skill, skill_instructions, update_skill, delete_skill, validate_name
+from skills.manager import list_skills, load_skill, skill_instructions, update_skill, delete_skill, validate_name
 from skills.proposals import confirm_proposal, draft_skill, store_proposal
 from memory import manager
 from memory.proposals import MemoryProposal, extract_proposals
@@ -309,7 +309,7 @@ def confirm_memories(request: MemoryProposalRequest) -> dict[str, int]:
 
 
 @app.get("/api/skills")
-def get_skills() -> dict[str, list[Skill]]:
+def get_skills() -> dict[str, list[dict[str, object]]]:
     try:
         return {"skills": list_skills()}
     except (ValueError, OSError) as error:
@@ -347,7 +347,7 @@ def confirm_skill(request: SkillProposalConfirmation) -> dict[str, object]:
 
 
 @app.put("/api/skills/{name}")
-def edit_skill(name: str, request: SkillContentRequest) -> dict[str, Skill]:
+def edit_skill(name: str, request: SkillContentRequest) -> dict[str, dict[str, object]]:
     try:
         return {"skill": update_skill(name, request.content)}
     except FileNotFoundError as error:
