@@ -181,7 +181,10 @@ def save_skill(content: str, expected_name: str | None = None) -> Skill:
 
 def update_skill(name: str, content: str) -> Skill:
     skill = parse_skill(content, name)
-    _atomic_write(_skill_path(name), skill["content"])
+    path = _skill_path(name)
+    if not path.is_file():
+        raise FileNotFoundError(f"No skill named '{name}' was found.")
+    _atomic_write(path, skill["content"])
     return skill
 
 

@@ -34,6 +34,13 @@ def test_skill_names_and_user_folder_paths_are_validated(isolated_user_data: Pat
     outside.write_text("not a skill", encoding="utf-8")
     with pytest.raises(ValueError):
         skills.update_skill("../outside", outside.read_text(encoding="utf-8"))
+    valid_content = format_skill(
+        "missing",
+        "A missing skill.",
+        [{"instruction": "Do nothing.", "tools": []}],
+    )
+    with pytest.raises(FileNotFoundError):
+        skills.update_skill("missing", valid_content)
     assert outside.read_text(encoding="utf-8") == "not a skill"
 
 
@@ -169,11 +176,12 @@ def test_morning_brief_is_read_only_and_saved_when_web_search_fails(
 
     def fake_model(messages):
         seen.append(str(messages[-1]["content"]))
-        yield "Review the seed swap plan and prepare for the upcoming garden walk. The web part was skipped."
+        yield "Review the seed swap plan and prepare for the upcoming garden walk."
 
     result = service.run_morning_brief(fake_model)
 
     assert len(result.split()) < 200
+    assert "web part was skipped" in result.lower()
     assert "web_search_skipped': True" in seen[0]
     assert read_brief() == result + "\n"
     assert not (isolated_user_data / "tasks.json").exists()

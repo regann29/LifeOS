@@ -79,7 +79,8 @@ def run_morning_brief(generate_text: GenerateText) -> str:
     text = _word_limit("".join(generate_text(prompt)).strip())
     if not text:
         raise RuntimeError("The model returned an empty morning brief.")
-    if len(text.split()) >= 200:
-        text = _word_limit(text)
+    if web_skipped and not re.search(r"\bweb\b.*\bskipped\b", text, re.IGNORECASE):
+        text = " ".join(text.split()[:190]).rstrip() + " The web part was skipped."
+    text = _word_limit(text)
     save_brief(text)
     return text
