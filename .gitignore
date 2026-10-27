@@ -18,3 +18,7 @@ data/demo/memory/*
 data/demo/notes/*
 !data/demo/notes/garden-planning.md
 !data/demo/tasks.json
+!data/demo/skills/
+data/demo/skills/*
+!data/demo/skills/weekly-review.md
+!data/demo/skills/garden-checkin.md

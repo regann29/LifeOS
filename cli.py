@@ -1,3 +1,5 @@
+import re
+
 from openai import OpenAIError
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -6,6 +8,8 @@ from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory.manager import add
 from memory.proposals import extract_proposals
+from skills.manager import load_skill, skill_instructions
+from skills.proposals import confirm_proposal, draft_skill, store_proposal
 
 
 def _new_session() -> list[ChatCompletionMessageParam]:
@@ -45,9 +49,12 @@ def _end_session(
     return _new_session()
 
 
-def _run_agent(messages: list[ChatCompletionMessageParam]) -> str:
+def _run_agent(
+    messages: list[ChatCompletionMessageParam],
+    allowed_tools: set[str] | None = None,
+) -> str:
     response = ""
-    events = agent_events(messages)
+    events = agent_events(messages, allowed_tools=allowed_tools)
     while True:
         approval_id: str | None = None
         approved = False
@@ -80,9 +87,41 @@ def _run_agent(messages: list[ChatCompletionMessageParam]) -> str:
         events = resume_approval(approval_id, approved)
 
 
+def _save_skill(messages: list[ChatCompletionMessageParam], name: str) -> None:
+    content = draft_skill(name, messages, stream_strict_answer)
+    if content is None:
+        print("Nothing to save.")
+        return
+    proposal = store_proposal(content)
+    print("\nReview this skill draft:\n")
+    print(content)
+    answer = input("Save, edit, or reject? [y/e/N] ").strip().lower()
+    if answer == "e":
+        print("Enter edited Markdown, then type .save on its own line. Type .cancel to reject.")
+        lines: list[str] = []
+        while True:
+            line = input()
+            if line == ".save":
+                break
+            if line == ".cancel":
+                print("Draft rejected.")
+                return
+            lines.append(line)
+        content = "\n".join(lines)
+        answer = input("Save this edited skill? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        print("Draft rejected.")
+        return
+    try:
+        saved = confirm_proposal(proposal["proposal_id"], content)
+        print(f"Saved skill '{saved['name']}'.")
+    except (ValueError, FileExistsError) as error:
+        print(f"Could not save this skill: {error}")
+
+
 def main() -> None:
     messages = _new_session()
-    print("LifeOS chat (type /end to review memories, /exit to quit)")
+    print("LifeOS chat (type /end, /skill <name>, /brief, or /exit)")
     while True:
         try:
             text = input("\nYou: ").strip()
@@ -98,6 +137,63 @@ def main() -> None:
                 print(f"\nLifeOS could not review this session: {error}")
             except OpenAIError as error:
                 print(f"\nLifeOS could not review this session: {friendly_provider_error(error)}")
+            continue
+        if text == "/brief":
+            try:
+                from briefs.service import run_morning_brief
+
+                print(run_morning_brief(stream_strict_answer))
+            except (RuntimeError, ValueError, OSError, OpenAIError) as error:
+                message = (
+                    friendly_provider_error(error)
+                    if isinstance(error, OpenAIError)
+                    else str(error)
+                )
+                print(f"\nLifeOS could not prepare the brief: {message}")
+            continue
+        skill_match = re.fullmatch(r"/skill\s+(.+)", text)
+        if skill_match:
+            try:
+                skill = load_skill(skill_match.group(1).strip())
+                run_messages = [
+                    *messages,
+                    {"role": "user", "content": text},
+                    {"role": "user", "content": skill_instructions(skill)},
+                ]
+                answer = _run_agent(
+                    run_messages,
+                    {tool for step in skill["steps"] for tool in step["tools"]},
+                )
+                messages.extend(
+                    [
+                        {"role": "user", "content": text},
+                        {"role": "assistant", "content": answer},
+                    ]
+                )
+            except (FileNotFoundError, ValueError) as error:
+                print(f"\nLifeOS could not run that skill: {error}")
+            except (RuntimeError, OpenAIError) as error:
+                message = (
+                    friendly_provider_error(error)
+                    if isinstance(error, OpenAIError)
+                    else str(error)
+                )
+                print(f"\nLifeOS could not run that skill: {message}")
+            continue
+        skill_save_match = re.fullmatch(
+            r"save this as a skill\s+([A-Za-z0-9-]+)", text, re.IGNORECASE
+        )
+        if skill_save_match:
+            messages.append({"role": "user", "content": text})
+            try:
+                _save_skill(messages, skill_save_match.group(1))
+            except (RuntimeError, OpenAIError) as error:
+                message = (
+                    friendly_provider_error(error)
+                    if isinstance(error, OpenAIError)
+                    else str(error)
+                )
+                print(f"\nLifeOS could not draft the skill: {message}")
             continue
         if not text:
             continue
