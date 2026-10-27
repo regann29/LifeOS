@@ -133,8 +133,12 @@ select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-
   .shell { width: min(100% - 24px, 760px); }
   .intro { padding: 44px 0 24px; }
   h1 { letter-spacing: -1.8px; }
-  .workspace { grid-template-columns: 1fr; }
   .chat-card, .memory-panel, .proposals-card { padding: 15px; }
   .messages { min-height: 160px; max-height: 50vh; }
+  .chat-actions { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 680px) {
+  .workspace { grid-template-columns: 1fr; }
   .chat-actions { align-items: flex-start; flex-direction: column; }
 }
