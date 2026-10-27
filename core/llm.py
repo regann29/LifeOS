@@ -215,4 +215,4 @@ def stream_agent_completion(
     messages: Sequence[ChatCompletionMessageParam],
     tools: list[ChatCompletionToolParam],
 ) -> Iterator[ChatCompletionChunk]:
-    yield from _create_stream(messages, tools=tools, enable_thinking=False)
+    yield from _create_stream(messages, tools=tools or None, enable_thinking=False)

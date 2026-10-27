@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 
 from core.llm import stream_agent_completion, stream_chat
 from tools.activity import log_tool_call
@@ -21,6 +21,7 @@ _clock = time.monotonic
 @dataclass
 class AgentState:
     messages: list[dict[str, Any]]
+    tool_definitions: list[ChatCompletionToolParam]
     answer_stream: Any | None = None
     tool_steps: int = 0
     invalid_attempts: dict[str, int] = field(default_factory=dict)
@@ -104,7 +105,7 @@ def _stream_agent(
             gathered: dict[int, dict[str, Any]] = {}
             content = ""
             reasoning_parts: list[str] = []
-            for chunk in complete(state.messages, TOOL_DEFINITIONS):
+            for chunk in complete(state.messages, state.tool_definitions):
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -253,10 +254,17 @@ def _stream_agent(
 def agent_events(
     messages: list[ChatCompletionMessageParam],
     complete: Any = stream_agent_completion,
+    allowed_tools: set[str] | None = None,
 ):
     answer_stream = stream_chat if complete is stream_agent_completion else None
+    tool_definitions = [
+        tool
+        for tool in TOOL_DEFINITIONS
+        if allowed_tools is None or tool["function"]["name"] in allowed_tools
+    ]
     state = AgentState(
         messages=[dict(message) for message in messages],
+        tool_definitions=tool_definitions,
         answer_stream=answer_stream,
     )
     yield from _stream_agent(state, complete)
