@@ -43,6 +43,7 @@
             </form>
             <div class="chat-actions">
               <p id="notice" class="notice">Sent to the configured model provider. This build does not redact personal details.</p>
+              <button id="save-skill" class="secondary-button" type="button">Save as skill</button>
               <button id="end-session" class="secondary-button" type="button">End session</button>
             </div>
           </div>
@@ -59,9 +60,48 @@
             <div id="proposal-list" class="proposal-list"></div>
             <p id="proposal-notice" class="notice" role="status"></p>
           </section>
+
+          <section id="skill-proposal" class="proposals-card" aria-live="polite" hidden>
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">REUSABLE ROUTINE</p>
+                <h2>Review your skill</h2>
+              </div>
+              <button id="confirm-skill" type="button">Save skill</button>
+            </div>
+            <p class="panel-description">Edit the draft below. Nothing is saved until you choose Save skill.</p>
+            <textarea id="skill-draft" class="proposal-editor skill-editor" maxlength="12000"></textarea>
+            <p id="skill-proposal-notice" class="notice" role="status"></p>
+          </section>
         </section>
 
         <aside class="memory-panel" aria-labelledby="memory-title">
+          <section class="brief-panel" aria-labelledby="brief-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">A GENTLE START</p>
+                <h2 id="brief-title">Morning brief</h2>
+              </div>
+              <button id="run-brief" type="button">Run now</button>
+            </div>
+            <p class="panel-description">A short read-only overview of your memories, plans, and the web.</p>
+            <div id="brief-content" class="brief-content" aria-live="polite">No brief yet.</div>
+            <p id="brief-notice" class="notice" role="status"></p>
+          </section>
+
+          <section class="skills-panel" aria-labelledby="skills-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">ROUTINES YOU TEACH</p>
+                <h2 id="skills-title">Skills</h2>
+              </div>
+              <button id="refresh-skills" class="icon-button" type="button" aria-label="Refresh skills">↻</button>
+            </div>
+            <p class="panel-description">Run a routine you have saved. Any change still needs your approval.</p>
+            <div id="skills-list" class="skills-list" aria-live="polite"></div>
+            <p id="skills-notice" class="notice" role="status"></p>
+          </section>
+
           <div class="panel-heading">
             <div>
               <p class="eyebrow">YOUR NOTES TO SELF</p>
