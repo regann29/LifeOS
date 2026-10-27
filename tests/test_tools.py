@@ -137,6 +137,52 @@ def test_notes_search_returns_only_five_short_snippets() -> None:
     assert all("snippet" in match and "text" not in match for match in matches)
 
 
+def _create_symlink(link: Path, target: Path, *, directory: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=directory)
+    except OSError as error:
+        pytest.skip(f"Symlinks are unavailable in this environment: {error}")
+
+
+def test_notes_search_rejects_symlinked_notes_directory(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-notes"
+    outside.mkdir()
+    (outside / "note.md").write_text("private phrase\n", encoding="utf-8")
+    notes_link = manager.user_data_dir() / "notes"
+    _create_symlink(notes_link, outside, directory=True)
+
+    with pytest.raises(ValueError, match="stay inside"):
+        search_notes("private")
+
+
+def test_notes_search_skips_symlinked_note_files(tmp_path: Path) -> None:
+    outside_note = tmp_path / "outside.md"
+    outside_note.write_text("private phrase\n", encoding="utf-8")
+    notes = manager.user_data_dir() / "notes"
+    notes.mkdir()
+    _create_symlink(notes / "linked.md", outside_note)
+
+    assert search_notes("private") == []
+
+
+@pytest.mark.parametrize("filename", ["tasks.json", "activity.jsonl"])
+def test_tasks_and_activity_reject_symlinked_files(
+    tmp_path: Path,
+    filename: str,
+) -> None:
+    outside = tmp_path / f"outside-{filename}"
+    outside.write_text("[]\n", encoding="utf-8")
+    link = manager.user_data_dir() / filename
+    _create_symlink(link, outside)
+
+    if filename == "tasks.json":
+        with pytest.raises(ValueError, match="stay inside"):
+            list_tasks()
+    else:
+        with pytest.raises(ValueError, match="stay inside"):
+            activity.list_activity()
+
+
 def test_user_folder_rejects_traversal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIFEOS_USER", "..\\other-user")
 
