@@ -170,6 +170,35 @@ def test_hosted_model_tokens_are_capped(
     assert captured["max_tokens"] == hosted.HOSTED_MAX_TOKENS
 
 
+def test_hosted_proposal_ids_cannot_be_used_in_another_session(
+    hosted_environment: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_stream(_messages):
+        yield (
+            '[{"file":"profile.md","text":"- Sample person.",'
+            '"reason":"Stated directly."}]'
+        )
+
+    monkeypatch.setattr("main.stream_strict_answer", fake_stream)
+    with TestClient(app) as first_client, TestClient(app) as second_client:
+        generated = first_client.post(
+            "/api/session/end",
+            json={
+                "user_id": "victim",
+                "messages": [{"role": "user", "content": "I am a sample person."}],
+            },
+        )
+        proposal_id = generated.json()["proposals"][0]["proposal_id"]
+        response = second_client.post(
+            "/api/memory/confirm",
+            json={"proposals": [{"proposal_id": proposal_id}]},
+        )
+
+    assert generated.status_code == 200
+    assert response.status_code == 400
+
+
 def test_hosted_banner_is_only_rendered_when_enabled(
     hosted_environment: tuple[Path, Path],
     monkeypatch: pytest.MonkeyPatch,
