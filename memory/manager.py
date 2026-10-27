@@ -1,6 +1,7 @@
 import os
 import re
 import tempfile
+from contextvars import ContextVar, Token
 from datetime import date
 from pathlib import Path
 from typing import Final
@@ -8,6 +9,7 @@ from typing import Final
 MEMORY_FILES: Final[tuple[str, ...]] = ("profile.md", "preferences.md", "events.md")
 SUMMARY_LIMIT: Final[int] = 1500
 DATA_ROOT = Path(__file__).resolve().parents[1] / "data"
+_USER_DATA_DIR: ContextVar[Path | None] = ContextVar("lifeos_user_data_dir", default=None)
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _EVENT_DATE_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2}):\s+\S")
 
@@ -20,12 +22,23 @@ def _user_id() -> str:
 
 
 def user_data_dir() -> Path:
+    override = _USER_DATA_DIR.get()
+    if override is not None:
+        return override
     data_root = DATA_ROOT.resolve()
     user_dir = data_root / _user_id()
     if user_dir.resolve() != user_dir:
         raise ValueError("LIFEOS_USER cannot point to a linked folder.")
     user_dir.mkdir(parents=True, exist_ok=True)
     return user_dir
+
+
+def set_user_data_dir(path: Path) -> Token[Path | None]:
+    return _USER_DATA_DIR.set(path)
+
+
+def reset_user_data_dir(token: Token[Path | None]) -> None:
+    _USER_DATA_DIR.reset(token)
 
 
 def _memory_dir() -> Path:
