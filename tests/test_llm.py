@@ -130,6 +130,16 @@ def test_unknown_provider_has_clear_allowed_values_error(
         list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
 
 
+def test_unknown_provider_error_precedes_missing_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup_fake_client(monkeypatch, [], provider="unknown")
+    monkeypatch.setenv("LLM_API_KEY", "replace-with-a-key")
+
+    with pytest.raises(RuntimeError, match="LLM_PROVIDER must be one of: nvidia, nebius"):
+        list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
+
+
 def test_agent_tool_calls_disable_nvidia_thinking(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

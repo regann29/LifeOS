@@ -74,13 +74,13 @@ def _boolean(name: str, default: bool) -> bool:
 
 def _settings() -> LLMSettings:
     load_dotenv()
-    api_key = os.getenv("LLM_API_KEY", "").strip()
-    if _is_placeholder(api_key):
-        raise RuntimeError(API_KEY_ERROR)
-
     provider = os.getenv("LLM_PROVIDER", "nebius").strip().casefold()
     if provider not in {"nvidia", "nebius"}:
         raise RuntimeError("LLM_PROVIDER must be one of: nvidia, nebius.")
+
+    api_key = os.getenv("LLM_API_KEY", "").strip()
+    if _is_placeholder(api_key):
+        raise RuntimeError(API_KEY_ERROR)
 
     base_url = os.getenv("LLM_BASE_URL", "").strip()
     model = os.getenv("LLM_MODEL", "").strip()
@@ -163,7 +163,11 @@ def _create_stream(
 
     try:
         hosted.consume_model_call()
-        client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
+        client = OpenAI(
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+            max_retries=0,
+        )
         response = client.chat.completions.create(
             model=settings.model,
             messages=list(messages),
