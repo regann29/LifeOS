@@ -29,6 +29,7 @@ def hosted_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple
     monkeypatch.setattr(hosted, "_RATE_EVENTS", defaultdict(deque))
     monkeypatch.setattr(hosted, "_CALL_DATE", None)
     monkeypatch.setattr(hosted, "_CALL_COUNT", 0)
+    monkeypatch.setattr(hosted, "RATE_LIMIT_REQUESTS", 3)
     monkeypatch.setenv("LIFEOS_HOSTED", "true")
     monkeypatch.setenv("LIFEOS_USER", "../must-be-ignored")
     return sessions, demo
@@ -110,20 +111,20 @@ def test_hosted_rate_limit_is_shared_by_ip_across_sessions(hosted_environment) -
             "/api/chat",
             json={"messages": [{"role": "user", "content": "Hi"}]},
         ).status_code
-        for _ in range(15)
+        for _ in range(2)
     ]
     second_statuses = [
         second_client.post(
             "/api/chat",
             json={"messages": [{"role": "user", "content": "Hi"}]},
         ).status_code
-        for _ in range(6)
+        for _ in range(2)
     ]
     first_client.close()
     second_client.close()
 
-    assert first_statuses == [200] * 15
-    assert second_statuses[:5] == [200] * 5
+    assert first_statuses == [200] * 2
+    assert second_statuses[:1] == [200]
     assert second_statuses[-1] == 429
 
 
