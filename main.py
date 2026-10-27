@@ -8,15 +8,15 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from openai import OpenAIError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.llm import friendly_provider_error, stream_strict_answer, validate_llm_configuration
 from core.hosted import HOSTED_MAX_MESSAGE_CHARS, HOSTED_MAX_TOTAL_MESSAGE_CHARS, HostedSessionMiddleware, is_hosted
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory import manager
-from memory.confirmation import save_proposals
 from memory.proposals import MemoryProposal, extract_proposals
+from memory.proposal_store import ProposalSelection, confirm_proposals, store_proposals
 from tools.activity import list_activity
 
 logger = logging.getLogger(__name__)
@@ -57,14 +57,16 @@ class MemoryLineReference(BaseModel):
     line_number: int = Field(ge=1)
 
 
-class MemoryProposalInput(BaseModel):
-    file: str
-    text: str = Field(min_length=1, max_length=1000)
-    reason: str = Field(min_length=1, max_length=1000)
+class MemoryProposalSelectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
+    proposal_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    text: str | None = Field(default=None, min_length=1, max_length=1000)
 
 class MemoryProposalRequest(BaseModel):
-    proposals: list[MemoryProposalInput] = Field(max_length=40)
+    model_config = ConfigDict(extra="forbid")
+
+    proposals: list[MemoryProposalSelectionInput] = Field(max_length=40)
 
 
 class ApprovalDecision(BaseModel):
@@ -241,8 +243,9 @@ def end_session(request: ChatRequest) -> dict[str, object]:
             status_code=502,
             detail=friendly_provider_error(error),
         ) from error
+    stored_proposals = store_proposals(proposals)
     return {
-        "proposals": proposals,
+        "proposals": stored_proposals,
         "message": "Review each suggestion and select the memories to save."
         if proposals
         else "Nothing to save.",
@@ -252,11 +255,11 @@ def end_session(request: ChatRequest) -> dict[str, object]:
 @app.post("/api/memory/confirm")
 def confirm_memories(request: MemoryProposalRequest) -> dict[str, int]:
     try:
-        proposals: list[MemoryProposal] = [
-            {"file": item.file, "text": item.text, "reason": item.reason}
+        selections: list[ProposalSelection] = [
+            {"proposal_id": item.proposal_id, "text": item.text}
             for item in request.proposals
         ]
-        saved, skipped = save_proposals(proposals)
+        saved, skipped = confirm_proposals(selections)
         return {"saved": saved, "skipped_duplicates": skipped}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
