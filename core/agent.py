@@ -21,7 +21,9 @@ _clock = time.monotonic
 @dataclass
 class AgentState:
     messages: list[dict[str, Any]]
-    tool_definitions: list[ChatCompletionToolParam]
+    tool_definitions: list[ChatCompletionToolParam] = field(
+        default_factory=lambda: TOOL_DEFINITIONS.copy()
+    )
     answer_stream: Any | None = None
     tool_steps: int = 0
     invalid_attempts: dict[str, int] = field(default_factory=dict)

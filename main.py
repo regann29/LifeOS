@@ -123,7 +123,12 @@ def _agent_stream_response(
 ) -> StreamingResponse:
     def response_lines() -> Iterator[str]:
         try:
-            for event in agent_events(messages, allowed_tools=allowed_tools):
+            events = (
+                agent_events(messages)
+                if allowed_tools is None
+                else agent_events(messages, allowed_tools=allowed_tools)
+            )
+            for event in events:
                 yield json.dumps(event, ensure_ascii=False) + "\n"
         except RuntimeError as error:
             yield json.dumps({"type": "error", "message": str(error)}) + "\n"
