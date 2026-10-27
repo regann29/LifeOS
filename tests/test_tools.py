@@ -240,7 +240,7 @@ def test_web_tool_converts_network_errors_to_tool_results(
     def fail(_query: str) -> None:
         raise failure
 
-    monkeypatch.setattr(web_search, "search_web", fail)
+    monkeypatch.setattr("tools.registry.search_web", fail)
 
     result = execute_tool("web_search", {"query": "garden"})
 
@@ -262,6 +262,7 @@ def test_web_search_converts_bad_responses_to_tool_results(
         def search(self, **_kwargs: object) -> object:
             return response
 
+    monkeypatch.setattr("tools.registry.search_web", lambda _query: web_search.search_web(_query))
     monkeypatch.setattr(web_search, "TavilyClient", FakeTavilyClient)
     monkeypatch.setattr(web_search, "load_dotenv", lambda: None)
     monkeypatch.setenv("TAVILY_API_KEY", "test-key")
