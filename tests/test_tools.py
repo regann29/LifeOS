@@ -140,8 +140,9 @@ def test_notes_search_returns_only_five_short_snippets() -> None:
 def test_user_folder_rejects_traversal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIFEOS_USER", "..\\other-user")
 
-    with pytest.raises(ValueError, match="LIFEOS_USER"):
-        execute_tool("tasks", {"action": "list"})
+    result = execute_tool("tasks", {"action": "list"})
+
+    assert "could not use its saved data" in result["error"]
 
 
 def test_registry_exposes_exactly_three_native_tools() -> None:

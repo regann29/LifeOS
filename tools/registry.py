@@ -158,7 +158,9 @@ def execute_tool(name: str, arguments: dict[str, Any], allow_risky: bool = False
     except (OSError, UnicodeError):
         return {"error": f"The {name} tool could not access its local data."}
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-        return {"error": f"The {name} tool could not use its saved data or the returned response."}
+        if name == "web_search":
+            return {"error": "Web search returned an unexpected response."}
+        return {"error": f"The {name} tool could not use its saved data."}
     except Exception as error:
         logger.warning("Tool %s failed with %s", name, type(error).__name__)
         return {"error": f"The {name} tool failed unexpectedly. Please try again."}

@@ -52,7 +52,7 @@ LifeOS keeps three plain-text files for the current user: `profile.md` for who y
 
 Open the Memory panel to read, add, edit, or delete a line. LifeOS suggests possible memories when you choose **End session**; you can edit, reject, or confirm each one. Only items you confirm and choose **Save selected** are written. Duplicate memories are skipped. You can also type `/end` in the CLI and answer yes or no for each suggestion.
 
-The demo starts with fictional sample memories. Files for other users are local data and are not intended to be committed.
+The hosted demo is for sample data only. Each visitor gets a separate temporary copy of the fictional demo files; those copies are removed after three hours of inactivity. Do not enter real personal information in the hosted demo.
 
 ## What LifeOS can do for you
 
@@ -66,7 +66,7 @@ The Activity log records every tool call, its input, whether it was approved, an
 
 ## Privacy, in plain words
 
-Your memory, notes, task list, and activity log are local readable files. Chat and the conversation used to suggest memories are sent to the model provider configured in `.env`. A web search sends its query to Tavily. This build does not yet redact private details. Do not enter passwords, API keys, or other sensitive information.
+Your memory, notes, task list, and activity log are readable files on the machine running LifeOS: your computer when you run it locally, or the server when it is hosted. The hosted demo uses temporary copies of fictional sample data and is for sample data only. Chat and the conversation used to suggest memories are sent to the model provider configured in `.env`. A web search sends its query to Tavily. This build does not yet redact private details. Do not enter passwords, API keys, or other sensitive information.
 
 The app reads API keys from environment variables (or your local `.env` file). Keep `.env` private; it is excluded from Git.
 
