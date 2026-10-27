@@ -166,7 +166,13 @@ class HostedSessionMiddleware:
         try:
             path = scope.get("path", "")
             method = scope.get("method", "")
-            if method == "POST" and path in {"/api/chat", "/api/session/end"}:
+            if method == "POST" and path in {
+                "/api/chat",
+                "/api/session/end",
+                "/api/skills/propose",
+                "/api/skills/run",
+                "/api/brief/run",
+            }:
                 if not _rate_limit_allows(session_id, _client_ip(scope)):
                     body = b'{"detail":"Demo request limit reached. Please try again later."}'
                     await send_with_session(

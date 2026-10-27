@@ -306,3 +306,100 @@ def confirm_memories(request: MemoryProposalRequest) -> dict[str, int]:
         return {"saved": saved, "skipped_duplicates": skipped}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/skills")
+def get_skills() -> dict[str, list[Skill]]:
+    try:
+        return {"skills": list_skills()}
+    except (ValueError, OSError) as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@app.post("/api/skills/propose")
+def propose_skill(request: SkillDraftRequest) -> dict[str, object]:
+    _validate_hosted_messages(request.messages)
+    try:
+        name = validate_name(request.name)
+        messages = [message.model_dump() for message in request.messages]
+        content = draft_skill(name, messages, stream_strict_answer)
+        if content is None:
+            return {"proposal": None, "message": "Nothing to save."}
+        proposal = store_proposal(content)
+        return {"proposal": proposal, "message": "Review and edit this skill before saving."}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except OpenAIError as error:
+        raise HTTPException(status_code=502, detail=friendly_provider_error(error)) from error
+
+
+@app.post("/api/skills/confirm")
+def confirm_skill(request: SkillProposalConfirmation) -> dict[str, object]:
+    try:
+        skill = confirm_proposal(request.proposal_id, request.content)
+        return {"saved": True, "skill": skill}
+    except FileExistsError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.put("/api/skills/{name}")
+def edit_skill(name: str, request: SkillContentRequest) -> dict[str, Skill]:
+    try:
+        return {"skill": update_skill(name, request.content)}
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.delete("/api/skills/{name}")
+def remove_skill(name: str) -> dict[str, bool]:
+    try:
+        delete_skill(name)
+        return {"deleted": True}
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/skills/run")
+def run_skill(request: SkillRunRequest) -> StreamingResponse:
+    _validate_hosted_messages(request.messages)
+    try:
+        skill = load_skill(request.name)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    allowed_tools = {tool for step in skill["steps"] for tool in step["tools"]}
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": chat_system_prompt()},
+        *[message.model_dump() for message in request.messages],
+        {"role": "user", "content": skill_instructions(skill)},
+    ]
+    return _agent_stream_response(messages, allowed_tools)
+
+
+@app.get("/api/brief/latest")
+def latest_brief() -> dict[str, str | None]:
+    try:
+        return {"brief": read_brief()}
+    except (ValueError, OSError) as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@app.post("/api/brief/run")
+def run_brief() -> dict[str, str]:
+    try:
+        return {"brief": run_morning_brief(stream_strict_answer)}
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (ValueError, OSError) as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except OpenAIError as error:
+        raise HTTPException(status_code=502, detail=friendly_provider_error(error)) from error
