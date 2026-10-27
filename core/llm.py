@@ -17,6 +17,8 @@ from openai.types.chat import (
     ChatCompletionToolParam,
 )
 
+from core import hosted
+
 API_KEY_ERROR = "The API key is missing or wrong. Check LLM_API_KEY in .env, then restart the server."
 MODEL_ERROR = "Model name not found. Check LLM_MODEL."
 CONNECTION_ERROR = "Cannot reach the model. Check LLM_BASE_URL."
@@ -89,7 +91,9 @@ def _settings() -> LLMSettings:
         api_key=api_key,
         model=model,
         enable_thinking=_boolean("LLM_ENABLE_THINKING", True),
-        max_tokens=_positive_integer("LLM_MAX_TOKENS", 4096),
+        max_tokens=min(_positive_integer("LLM_MAX_TOKENS", 4096), hosted.HOSTED_MAX_TOKENS)
+        if hosted.is_hosted()
+        else _positive_integer("LLM_MAX_TOKENS", 4096),
         reasoning_budget=_positive_integer("LLM_REASONING_BUDGET", 2048),
     )
 
@@ -152,6 +156,7 @@ def _create_stream(
         body["tool_choice"] = "auto"
 
     try:
+        hosted.consume_model_call()
         client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
         response = client.chat.completions.create(
             model=settings.model,

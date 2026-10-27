@@ -2,14 +2,16 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator, Iterator
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from openai import OpenAIError
 from pydantic import BaseModel, Field
 
 from core.llm import friendly_provider_error, stream_strict_answer, validate_llm_configuration
+from core.hosted import HOSTED_MAX_MESSAGE_CHARS, HOSTED_MAX_TOTAL_MESSAGE_CHARS, HostedSessionMiddleware, is_hosted
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
 from memory import manager
@@ -29,6 +31,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="LifeOS", lifespan=lifespan)
+app.add_middleware(HostedSessionMiddleware)
 
 
 class ChatMessage(BaseModel):
@@ -80,8 +83,35 @@ class MemoryFileResponse(BaseModel):
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse("web/index.html")
+def index() -> HTMLResponse:
+    html_path = Path(__file__).resolve().parent / "web" / "index.html"
+    html = html_path.read_text(encoding="utf-8")
+    hosted_banner = (
+        '<aside class="demo-banner" role="alert">'
+        "Demo with sample data. Do not enter real personal information."
+        "</aside>"
+    )
+    if is_hosted():
+        html = html.replace("<!-- HOSTED_DEMO_BANNER -->", hosted_banner)
+    else:
+        html = html.replace("<!-- HOSTED_DEMO_BANNER -->", "")
+    return HTMLResponse(html)
+
+
+def _validate_hosted_message_size(request: ChatRequest) -> None:
+    if not is_hosted():
+        return
+    content_lengths = [len(message.content) for message in request.messages]
+    if any(length > HOSTED_MAX_MESSAGE_CHARS for length in content_lengths):
+        raise HTTPException(
+            status_code=413,
+            detail=f"Demo messages are limited to {HOSTED_MAX_MESSAGE_CHARS} characters each.",
+        )
+    if sum(content_lengths) > HOSTED_MAX_TOTAL_MESSAGE_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Demo conversations are limited to {HOSTED_MAX_TOTAL_MESSAGE_CHARS} characters.",
+        )
 
 
 @app.get("/app.js")
@@ -96,6 +126,7 @@ def styles() -> FileResponse:
 
 @app.post("/api/chat")
 def chat(request: ChatRequest) -> StreamingResponse:
+    _validate_hosted_message_size(request)
     messages = [
         {"role": "system", "content": chat_system_prompt()},
         *[message.model_dump() for message in request.messages],
@@ -199,6 +230,7 @@ def delete_memory(change: MemoryLineReference) -> dict[str, bool]:
 
 @app.post("/api/session/end")
 def end_session(request: ChatRequest) -> dict[str, object]:
+    _validate_hosted_message_size(request)
     messages = [message.model_dump() for message in request.messages]
     try:
         proposals = extract_proposals(messages, stream_strict_answer)

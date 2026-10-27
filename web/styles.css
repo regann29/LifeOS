@@ -23,6 +23,7 @@ body {
 }
 
 .shell { width: min(100% - 40px, 1080px); margin: 0 auto; }
+.demo-banner { margin: 12px 0 0; padding: 11px 15px; border: 1px solid #d5c69f; border-radius: 10px; background: #fff6df; color: #66532b; text-align: center; font-size: 12px; font-weight: 650; }
 .topbar { height: 82px; display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font: 800 19px system-ui, sans-serif; text-decoration: none; letter-spacing: -.7px; }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px 10px 10px 3px; background: var(--green); color: white; font-size: 15px; }
