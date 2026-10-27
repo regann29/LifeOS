@@ -391,6 +391,7 @@ function renderProposals() {
         return;
       }
       proposal.text = editField.value.trim();
+      proposal.edited = true;
       editField.hidden = true;
       text.hidden = false;
       text.textContent = proposal.text;
@@ -489,7 +490,10 @@ saveSelectedButton.addEventListener("click", async () => {
     const result = await api("/api/memory/confirm", {
       method: "POST",
       body: JSON.stringify({
-        proposals: selected.map(({ file, text, reason }) => ({ file, text, reason })),
+        proposals: selected.map((proposal) => ({
+          proposal_id: proposal.proposal_id,
+          ...(proposal.edited ? { text: proposal.text } : {}),
+        })),
       }),
     });
     proposalNotice.textContent =
