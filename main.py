@@ -14,6 +14,11 @@ from core.llm import friendly_provider_error, stream_strict_answer, validate_llm
 from core.hosted import HOSTED_MAX_MESSAGE_CHARS, HOSTED_MAX_TOTAL_MESSAGE_CHARS, HostedSessionMiddleware, is_hosted
 from core.agent import agent_events, resume_approval
 from core.prompts import chat_system_prompt
+from briefs.manager import read_brief
+from briefs.scheduler import create_scheduler
+from briefs.service import run_morning_brief
+from skills.manager import Skill, list_skills, load_skill, skill_instructions, update_skill, delete_skill, validate_name
+from skills.proposals import confirm_proposal, draft_skill, store_proposal
 from memory import manager
 from memory.proposals import MemoryProposal, extract_proposals
 from memory.proposal_store import ProposalSelection, confirm_proposals, store_proposals
@@ -27,7 +32,14 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     configuration_error = validate_llm_configuration()
     if configuration_error:
         logger.warning("%s", configuration_error)
-    yield
+    scheduler = create_scheduler()
+    if scheduler is not None:
+        scheduler.start()
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="LifeOS", lifespan=lifespan)
@@ -69,6 +81,65 @@ class MemoryProposalRequest(BaseModel):
     proposals: list[MemoryProposalSelectionInput] = Field(max_length=40)
 
 
+class SkillDraftRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+
+
+class SkillRunRequest(SkillDraftRequest):
+    pass
+
+
+class SkillProposalConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    content: str | None = Field(default=None, min_length=1, max_length=12000)
+
+
+class SkillContentRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=12000)
+
+
+def _validate_hosted_messages(messages: list[ChatMessage]) -> None:
+    if not is_hosted():
+        return
+    content_lengths = [len(message.content) for message in messages]
+    if any(length > HOSTED_MAX_MESSAGE_CHARS for length in content_lengths):
+        raise HTTPException(
+            status_code=413,
+            detail=f"Demo messages are limited to {HOSTED_MAX_MESSAGE_CHARS} characters each.",
+        )
+    if sum(content_lengths) > HOSTED_MAX_TOTAL_MESSAGE_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Demo conversations are limited to {HOSTED_MAX_TOTAL_MESSAGE_CHARS} characters.",
+        )
+
+
+def _agent_stream_response(
+    messages: list[dict[str, object]],
+    allowed_tools: set[str] | None = None,
+) -> StreamingResponse:
+    def response_lines() -> Iterator[str]:
+        try:
+            for event in agent_events(messages, allowed_tools=allowed_tools):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except RuntimeError as error:
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+        except (OSError, ValueError) as error:
+            logger.exception("A local tool or activity log operation failed")
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+        except OpenAIError as error:
+            yield json.dumps({"type": "error", "message": friendly_provider_error(error)}) + "\n"
+
+    return StreamingResponse(
+        response_lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 class ApprovalDecision(BaseModel):
     approval_id: str = Field(min_length=32, max_length=64, pattern=r"^[a-f0-9]+$")
     approved: bool
@@ -101,19 +172,7 @@ def index() -> HTMLResponse:
 
 
 def _validate_hosted_message_size(request: ChatRequest) -> None:
-    if not is_hosted():
-        return
-    content_lengths = [len(message.content) for message in request.messages]
-    if any(length > HOSTED_MAX_MESSAGE_CHARS for length in content_lengths):
-        raise HTTPException(
-            status_code=413,
-            detail=f"Demo messages are limited to {HOSTED_MAX_MESSAGE_CHARS} characters each.",
-        )
-    if sum(content_lengths) > HOSTED_MAX_TOTAL_MESSAGE_CHARS:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Demo conversations are limited to {HOSTED_MAX_TOTAL_MESSAGE_CHARS} characters.",
-        )
+    _validate_hosted_messages(request.messages)
 
 
 @app.get("/app.js")
@@ -134,23 +193,7 @@ def chat(request: ChatRequest) -> StreamingResponse:
         *[message.model_dump() for message in request.messages],
     ]
 
-    def response_lines() -> Iterator[str]:
-        try:
-            for event in agent_events(messages):
-                yield json.dumps(event, ensure_ascii=False) + "\n"
-        except RuntimeError as error:
-            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
-        except (OSError, ValueError) as error:
-            logger.exception("A local tool or activity log operation failed")
-            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
-        except OpenAIError as error:
-            yield json.dumps({"type": "error", "message": friendly_provider_error(error)}) + "\n"
-
-    return StreamingResponse(
-        response_lines(),
-        media_type="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return _agent_stream_response(messages)
 
 
 @app.post("/api/approval")

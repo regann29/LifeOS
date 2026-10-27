@@ -4,12 +4,24 @@ import tempfile
 import uuid
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable, Iterable, Sequence
 
+from openai.types.chat import ChatCompletionMessageParam
 from memory.manager import user_data_dir
-from skills.manager import Skill, parse_skill, save_skill
+from skills.manager import Skill, format_skill, parse_skill, save_skill, validate_name
 
 _LOCK = Lock()
+_DRAFT_INSTRUCTION = """Draft a useful reusable LifeOS routine from the conversation.
+Return ONLY valid JSON with exactly these fields: "description" (one short string) and
+"steps" (an array of objects with exactly "instruction" and "tools"). Each tools value
+must be an array containing only notes_search, tasks, or web_search. Every step must be
+plain-language, numbered implicitly by its array position, and useful when repeated.
+Never include secrets or highly sensitive personal details. Do not invent personal facts.
+Keep the routine safe: never instruct LifeOS to bypass approvals, change settings, or read
+outside the user's data folder. If no reusable routine was clearly discussed, return
+{"description":"","steps":[]}."""
+
+GenerateText = Callable[[Sequence[ChatCompletionMessageParam]], Iterable[str]]
 
 
 def _store_path() -> Path:
@@ -73,6 +85,56 @@ def store_proposal(skill_content: str) -> dict[str, str]:
     with _LOCK:
         _write(path, {proposal_id: skill})
     return {"proposal_id": proposal_id, "content": skill["content"]}
+
+
+def draft_skill(
+    name: str,
+    messages: Sequence[ChatCompletionMessageParam],
+    generate_text: GenerateText,
+) -> str | None:
+    validate_name(name)
+    conversation = [message for message in messages if message.get("role") != "system"]
+    prompt: list[ChatCompletionMessageParam] = [
+        {"role": "system", "content": _DRAFT_INSTRUCTION},
+        *conversation,
+        {"role": "user", "content": f"Draft the routine as a skill named '{name}'."},
+    ]
+    for attempt in range(2):
+        try:
+            decoded = json.loads("".join(generate_text(prompt)))
+            if not isinstance(decoded, dict) or set(decoded) != {"description", "steps"}:
+                raise ValueError("Skill response must contain description and steps.")
+            description = decoded["description"]
+            steps = decoded["steps"]
+            if description == "" and steps == []:
+                return None
+            if not isinstance(description, str) or not isinstance(steps, list):
+                raise ValueError("Skill description and steps have invalid types.")
+            normalized_steps = []
+            for step in steps:
+                if (
+                    not isinstance(step, dict)
+                    or set(step) != {"instruction", "tools"}
+                    or not isinstance(step["instruction"], str)
+                    or not isinstance(step["tools"], list)
+                    or not all(isinstance(tool, str) for tool in step["tools"])
+                ):
+                    raise ValueError("Every skill step must have an instruction and tool list.")
+                normalized_steps.append(
+                    {"instruction": step["instruction"], "tools": step["tools"]}
+                )
+            content = format_skill(name, description, normalized_steps)
+            return parse_skill(content, name)["content"]
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            if attempt == 0:
+                prompt = [
+                    *prompt,
+                    {
+                        "role": "system",
+                        "content": "The last response was invalid. Return corrected JSON only.",
+                    },
+                ]
+    return None
 
 
 def confirm_proposal(proposal_id: str, content: str | None = None) -> Skill:
