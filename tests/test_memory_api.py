@@ -11,7 +11,6 @@ from main import (
     MemoryChange,
     MemoryLineChange,
     MemoryLineReference,
-    MemoryProposalInput,
     MemoryProposalRequest,
     add_memory,
     confirm_memories,
