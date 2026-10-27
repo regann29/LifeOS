@@ -53,6 +53,7 @@ LifeOS keeps three plain-text files for the current user: `profile.md` for who y
 Open the Memory panel to read, add, edit, or delete a line. LifeOS suggests possible memories when you choose **End session**; you can edit, reject, or confirm each one. Only items you confirm and choose **Save selected** are written. Duplicate memories are skipped. You can also type `/end` in the CLI and answer yes or no for each suggestion.
 
 The hosted demo is for sample data only. Each visitor gets a separate temporary copy of the fictional demo files; those copies are removed after three hours of inactivity. Do not enter real personal information in the hosted demo.
+Set `LIFEOS_HOSTED=true` on the demo server to enable visitor sessions, limits, and the sample-data warning. Hosted mode allows up to 20 chat or end-session requests per visitor and IP every 10 minutes, and defaults to 500 model calls per UTC day. Set `LIFEOS_DAILY_MODEL_CALL_CAP` to change the daily limit.
 
 ## What LifeOS can do for you
 

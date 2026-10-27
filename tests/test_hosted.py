@@ -57,6 +57,7 @@ def test_hosted_visitors_get_private_demo_copies_and_cookie(
         second_id = second_client.cookies[hosted.SESSION_COOKIE]
 
         assert second.status_code == 200
+        assert "httponly" in second.headers["set-cookie"].lower()
         assert session_id != second_id
         assert second.json()["files"][0]["lines"] == [
             {"line_number": 1, "text": "- Sample visitor."}
@@ -141,6 +142,32 @@ def test_hosted_message_size_is_limited(hosted_environment) -> None:
 
     assert response.status_code == 413
     assert "limited" in response.json()["detail"]
+
+
+def test_hosted_model_tokens_are_capped(
+    hosted_environment: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "local-test-key")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_MAX_TOKENS", "4096")
+    monkeypatch.setattr(llm, "load_dotenv", lambda: None)
+    captured: dict[str, object] = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs: object) -> list[object]:
+            captured.update(kwargs)
+            return [SimpleNamespace(choices=[])]
+
+    class FakeClient:
+        def __init__(self, **_kwargs: str) -> None:
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(llm, "OpenAI", FakeClient)
+    list(llm.stream_chat([{"role": "user", "content": "Hi"}]))
+
+    assert captured["max_tokens"] == hosted.HOSTED_MAX_TOKENS
 
 
 def test_hosted_banner_is_only_rendered_when_enabled(

@@ -79,12 +79,43 @@ def test_confirm_endpoint_saves_only_server_proposals_and_skips_duplicates(
         {"proposal_id": proposal["proposal_id"]}
         for proposal in generated["proposals"]
     ]
+    assert len({item["proposal_id"] for item in selected_ids}) == 2
 
     result = confirm_memories(MemoryProposalRequest(proposals=selected_ids))
     assert result == {"saved": 1, "skipped_duplicates": 1}
     assert get_memory()["files"][1]["lines"] == [
         {"line_number": 1, "text": "- Likes short answers."}
     ]
+    with pytest.raises(HTTPException) as error:
+        confirm_memories(MemoryProposalRequest(proposals=[selected_ids[0]]))
+    assert error.value.status_code == 400
+
+
+def test_confirm_allows_editing_only_the_selected_server_proposal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_stream(_messages):
+        yield (
+            '[{"file":"preferences.md","text":"- Likes short answers.",'
+            '"reason":"Stated directly."}]'
+        )
+
+    monkeypatch.setattr("main.stream_strict_answer", fake_stream)
+    generated = end_session(
+        ChatRequest(messages=[ChatMessage(role="user", content="Keep it short.")])
+    )
+    proposal_id = generated["proposals"][0]["proposal_id"]
+
+    result = confirm_memories(
+        MemoryProposalRequest(
+            proposals=[
+                {"proposal_id": proposal_id, "text": "Prefers concise replies."}
+            ]
+        )
+    )
+
+    assert result == {"saved": 1, "skipped_duplicates": 0}
+    assert manager.read("preferences.md") == ["- Prefers concise replies."]
 
 
 def test_confirm_endpoint_rejects_arbitrary_memory_content() -> None:

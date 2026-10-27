@@ -69,7 +69,7 @@ def _new_session(root: Path) -> tuple[str, Path]:
         return session_id, destination
 
 
-def _get_or_create_session(cookie_header: bytes) -> tuple[str, Path, bool]:
+def _get_or_create_session(cookie_header: bytes) -> tuple[str, Path]:
     root = _session_root()
     now = time.time()
     with _SESSION_LOCK:
@@ -86,11 +86,11 @@ def _get_or_create_session(cookie_header: bytes) -> tuple[str, Path, bool]:
             existing = root / presented_id
             if existing.is_dir() and not existing.is_symlink():
                 os.utime(existing, (now, now))
-                return presented_id, existing, False
+                return presented_id, existing
 
         session_id, session_dir = _new_session(root)
         os.utime(session_dir, (now, now))
-        return session_id, session_dir, True
+        return session_id, session_dir
 
 
 def _client_ip(scope: dict[str, Any]) -> str:
@@ -146,7 +146,7 @@ class HostedSessionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        session_id, session_dir, is_new = _get_or_create_session(
+        session_id, session_dir = _get_or_create_session(
             dict(scope.get("headers", [])).get(b"cookie", b"")
         )
         token = manager.set_user_data_dir(session_dir)
@@ -159,8 +159,7 @@ class HostedSessionMiddleware:
         async def send_with_session(message: dict[str, Any]) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                if is_new:
-                    headers.append((b"set-cookie", cookie_header.encode("ascii")))
+                headers.append((b"set-cookie", cookie_header.encode("ascii")))
                 message = {**message, "headers": headers}
             await send(message)
 
