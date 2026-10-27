@@ -47,10 +47,11 @@ def _skills_dir() -> Path:
     directory = root / "skills"
     if directory.is_symlink():
         raise ValueError("The skills folder cannot be a linked folder.")
+    first_use = not directory.exists()
     directory.mkdir(parents=True, exist_ok=True)
     if not directory.resolve().is_relative_to(root):
         raise ValueError("Skills must stay inside the user's data folder.")
-    if not any(directory.iterdir()):
+    if first_use:
         _atomic_write(directory / "weekly-review.md", WEEKLY_REVIEW)
     return directory
 
