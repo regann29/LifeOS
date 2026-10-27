@@ -15,9 +15,19 @@ const addMemoryForm = document.querySelector("#add-memory-form");
 const newMemoryField = document.querySelector("#new-memory");
 const activityEntries = document.querySelector("#activity-entries");
 const activityNotice = document.querySelector("#activity-notice");
+const saveSkillButton = document.querySelector("#save-skill");
+const skillProposalSection = document.querySelector("#skill-proposal");
+const skillDraftField = document.querySelector("#skill-draft");
+const skillProposalNotice = document.querySelector("#skill-proposal-notice");
+const skillList = document.querySelector("#skills-list");
+const skillsNotice = document.querySelector("#skills-notice");
+const briefContent = document.querySelector("#brief-content");
+const briefNotice = document.querySelector("#brief-notice");
 const conversation = [];
 let proposals = [];
 let memoryData = [];
+let skillData = [];
+let skillProposal = null;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -405,10 +415,176 @@ function renderProposals() {
   }
 }
 
+async function requestSkillDraft(name) {
+  if (conversation.length === 0) {
+    skillProposalSection.hidden = false;
+    skillProposalNotice.textContent = "Chat about a routine first, then save it as a skill.";
+    return;
+  }
+  skillProposalSection.hidden = false;
+  skillProposalNotice.textContent = "Drafting a routine for you to review…";
+  try {
+    const result = await api("/api/skills/propose", {
+      method: "POST",
+      body: JSON.stringify({ name, messages: conversation }),
+    });
+    skillProposal = result.proposal;
+    skillDraftField.value = skillProposal?.content || "";
+    document.querySelector("#confirm-skill").disabled = !skillProposal;
+    skillProposalNotice.textContent = result.message;
+  } catch (error) {
+    skillProposal = null;
+    skillProposalNotice.textContent = `Could not draft this skill: ${error.message}`;
+  }
+}
+
+function renderSkills() {
+  skillList.replaceChildren();
+  for (const skill of skillData) {
+    const card = document.createElement("article");
+    card.className = "skill-card";
+    const title = document.createElement("strong");
+    title.textContent = skill.name;
+    const description = document.createElement("p");
+    description.className = "skill-description";
+    description.textContent = skill.description;
+    const actions = document.createElement("div");
+    actions.className = "skill-actions";
+    const run = document.createElement("button");
+    run.type = "button";
+    run.textContent = "Run";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary-button";
+    edit.textContent = "Edit";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button delete-button";
+    remove.textContent = "Delete";
+    actions.append(run, edit, remove);
+    card.append(title, description, actions);
+    skillList.append(card);
+
+    run.addEventListener("click", () => runSkill(skill.name));
+    edit.addEventListener("click", () => {
+      const editor = document.createElement("textarea");
+      editor.className = "skill-editor";
+      editor.maxLength = 12000;
+      editor.value = skill.content;
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "Save changes";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "secondary-button";
+      cancel.textContent = "Cancel";
+      const editActions = document.createElement("div");
+      editActions.className = "skill-actions";
+      editActions.append(save, cancel);
+      card.replaceChildren(title, editor, editActions);
+      save.addEventListener("click", async () => {
+        try {
+          await api(`/api/skills/${encodeURIComponent(skill.name)}`, {
+            method: "PUT",
+            body: JSON.stringify({ content: editor.value }),
+          });
+          skillsNotice.textContent = "Skill updated.";
+          await loadSkills();
+        } catch (error) {
+          skillsNotice.textContent = error.message;
+        }
+      });
+      cancel.addEventListener("click", renderSkills);
+    });
+    remove.addEventListener("click", async () => {
+      if (!window.confirm(`Delete the "${skill.name}" skill?`)) return;
+      try {
+        await api(`/api/skills/${encodeURIComponent(skill.name)}`, { method: "DELETE" });
+        skillsNotice.textContent = "Skill deleted.";
+        await loadSkills();
+      } catch (error) {
+        skillsNotice.textContent = error.message;
+      }
+    });
+  }
+  if (skillData.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No saved skills yet.";
+    skillList.append(empty);
+  }
+}
+
+async function loadSkills() {
+  try {
+    const result = await api("/api/skills");
+    skillData = result.skills;
+    renderSkills();
+  } catch (error) {
+    skillsNotice.textContent = error.message;
+  }
+}
+
+async function runSkill(name) {
+  if (sendButton.disabled) return;
+  const command = `/skill ${name}`;
+  conversation.push({ role: "user", content: command });
+  addMessage("user", command);
+  sendButton.disabled = true;
+  endSessionButton.disabled = true;
+  const answerElement = addMessage("assistant", "");
+  let waitingForApproval = false;
+  try {
+    const response = await fetch("/api/skills/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        messages: conversation,
+      }),
+    });
+    const result = await readAgentStream(response, answerElement);
+    if (result.approval) {
+      waitingForApproval = true;
+      addApprovalCard(result.approval, answerElement);
+      notice.textContent = "A task change from this routine is paused until you approve or deny it.";
+      return;
+    }
+    if (!result.completed) throw new Error("The response stream ended unexpectedly.");
+    conversation.push({ role: "assistant", content: result.answer });
+    notice.textContent = `Finished the ${name} routine.`;
+    await loadActivity();
+  } catch (error) {
+    answerElement.textContent = error.message;
+    answerElement.classList.add("error-message");
+    conversation.pop();
+  } finally {
+    if (!waitingForApproval) {
+      sendButton.disabled = false;
+      endSessionButton.disabled = false;
+    }
+  }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = promptField.value.trim();
   if (!text || sendButton.disabled) return;
+
+  const skillCommand = text.match(/^save this as a skill\s+([A-Za-z0-9-]+)$/i);
+  if (skillCommand) {
+    conversation.push({ role: "user", content: text });
+    addMessage("user", text);
+    promptField.value = "";
+    sendButton.disabled = true;
+    try {
+      await requestSkillDraft(skillCommand[1]);
+    } finally {
+      sendButton.disabled = false;
+      promptField.focus();
+    }
+    return;
+  }
 
   conversation.push({ role: "user", content: text });
   addMessage("user", text);
@@ -451,6 +627,70 @@ form.addEventListener("submit", async (event) => {
     promptField.focus();
   }
 });
+
+saveSkillButton.addEventListener("click", async () => {
+  const name = window.prompt("Choose a skill name (letters, numbers, and dashes):");
+  if (!name) return;
+  saveSkillButton.disabled = true;
+  try {
+    await requestSkillDraft(name.trim());
+  } finally {
+    saveSkillButton.disabled = false;
+  }
+});
+
+document.querySelector("#confirm-skill").addEventListener("click", async () => {
+  if (!skillProposal) return;
+  const button = document.querySelector("#confirm-skill");
+  button.disabled = true;
+  try {
+    await api("/api/skills/confirm", {
+      method: "POST",
+      body: JSON.stringify({
+        proposal_id: skillProposal.proposal_id,
+        content: skillDraftField.value,
+      }),
+    });
+    skillProposal = null;
+    skillProposalSection.hidden = true;
+    skillsNotice.textContent = "Skill saved.";
+    await loadSkills();
+  } catch (error) {
+    skillProposalNotice.textContent = `Could not save this skill: ${error.message}`;
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#reject-skill").addEventListener("click", () => {
+  skillProposal = null;
+  skillDraftField.value = "";
+  skillProposalSection.hidden = true;
+});
+
+document.querySelector("#refresh-skills").addEventListener("click", loadSkills);
+document.querySelector("#run-brief").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  briefNotice.textContent = "Preparing your read-only brief…";
+  try {
+    const result = await api("/api/brief/run", { method: "POST", body: "{}" });
+    briefContent.textContent = result.brief;
+    briefNotice.textContent = "Brief saved for today.";
+  } catch (error) {
+    briefNotice.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function loadBrief() {
+  try {
+    const result = await api("/api/brief/latest");
+    briefContent.textContent = result.brief || "No brief yet.";
+  } catch (error) {
+    briefNotice.textContent = error.message;
+  }
+}
 
 endSessionButton.addEventListener("click", async () => {
   if (sendButton.disabled || endSessionButton.disabled) return;
@@ -528,3 +768,5 @@ addMemoryForm.addEventListener("submit", async (event) => {
 
 loadMemory();
 loadActivity();
+loadSkills();
+loadBrief();
