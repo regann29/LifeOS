@@ -1,11 +1,15 @@
 import json
+import logging
 from typing import Any, Literal, TypedDict
 
 from openai.types.chat import ChatCompletionToolParam
+from requests.exceptions import RequestException, Timeout
 
 from tools.notes_search import search_notes
 from tools.tasks import add_task, complete_task, list_tasks
 from tools.web_search import search_web
+
+logger = logging.getLogger(__name__)
 
 
 class ToolPlan(TypedDict):
@@ -133,19 +137,31 @@ def execute_tool(name: str, arguments: dict[str, Any], allow_risky: bool = False
     plan = prepare_tool(name, arguments)
     if plan["risk"] == "write" and not allow_risky:
         raise ValueError("This tool changes data and must be explicitly approved first.")
-    if name == "notes_search":
-        return search_notes(_argument_string(arguments, "query"))
-    if name == "web_search":
-        return search_web(_argument_string(arguments, "query"))
-    if name == "tasks":
-        action = arguments["action"]
-        if action == "list":
-            return list_tasks()
-        if action == "add":
-            return add_task(_argument_string(arguments, "title"))
-        if action == "complete":
-            return complete_task(_argument_string(arguments, "task_id"))
-    raise ValueError(f"Unknown tool: {name}")
+    try:
+        if name == "notes_search":
+            return search_notes(_argument_string(arguments, "query"))
+        if name == "web_search":
+            return search_web(_argument_string(arguments, "query"))
+        if name == "tasks":
+            action = arguments["action"]
+            if action == "list":
+                return list_tasks()
+            if action == "add":
+                return add_task(_argument_string(arguments, "title"))
+            if action == "complete":
+                return complete_task(_argument_string(arguments, "task_id"))
+        raise ValueError(f"Unknown tool: {name}")
+    except Timeout:
+        return {"error": "Web search timed out after 10 seconds. Please try again."}
+    except RequestException:
+        return {"error": "Web search could not connect. Check the connection and try again."}
+    except (OSError, UnicodeError):
+        return {"error": f"The {name} tool could not access its local data."}
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return {"error": f"The {name} tool could not use its saved data or the returned response."}
+    except Exception as error:
+        logger.warning("Tool %s failed with %s", name, type(error).__name__)
+        return {"error": f"The {name} tool failed unexpectedly. Please try again."}
 
 
 def parse_arguments(raw: str) -> dict[str, Any]:

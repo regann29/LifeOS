@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from requests.exceptions import ConnectionError as RequestConnectionError, Timeout
 
 import core.agent as agent
 from core.agent import agent_events, resume_approval
@@ -201,6 +202,7 @@ def test_web_search_uses_tavily_and_returns_limited_fields(
 
     assert captured["api_key"] == "test-tavily-key"
     assert captured["query"] == "garden planning"
+    assert captured["timeout"] == 10
     assert results == [
         {
             "title": "Garden guide",
@@ -221,6 +223,91 @@ def test_web_search_reports_missing_tavily_key(monkeypatch: pytest.MonkeyPatch) 
             "summary": "Add TAVILY_API_KEY to your local .env file to enable web search.",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [
+        (Timeout(), "timed out after 10 seconds"),
+        (RequestConnectionError(), "could not connect"),
+    ],
+)
+def test_web_tool_converts_network_errors_to_tool_results(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    message: str,
+) -> None:
+    def fail(_query: str) -> None:
+        raise failure
+
+    monkeypatch.setattr(web_search, "search_web", fail)
+
+    result = execute_tool("web_search", {"query": "garden"})
+
+    assert message in result["error"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [None, [], {"results": None}, {"results": ["not an object"]}],
+)
+def test_web_search_converts_bad_responses_to_tool_results(
+    monkeypatch: pytest.MonkeyPatch,
+    response: object,
+) -> None:
+    class FakeTavilyClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def search(self, **_kwargs: object) -> object:
+            return response
+
+    monkeypatch.setattr(web_search, "TavilyClient", FakeTavilyClient)
+    monkeypatch.setattr(web_search, "load_dotenv", lambda: None)
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key")
+
+    result = execute_tool("web_search", {"query": "garden"})
+
+    assert "unexpected response" in result["error"] or "unexpected result" in result["error"]
+
+
+def test_corrupt_tasks_file_becomes_a_clear_tool_result() -> None:
+    path = manager.user_data_dir() / "tasks.json"
+    path.write_text("{", encoding="utf-8")
+
+    result = execute_tool("tasks", {"action": "list"})
+
+    assert "could not use its saved data" in result["error"]
+
+
+def test_tool_network_failure_is_returned_to_model_not_stream_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+    observed_messages: list[dict[str, object]] = []
+
+    def fail_search(_query: str) -> None:
+        raise Timeout()
+
+    monkeypatch.setattr("tools.registry.search_web", fail_search)
+
+    def complete(messages, _tools):
+        nonlocal call_count
+        call_count += 1
+        observed_messages.extend(messages)
+        if call_count == 1:
+            return [_chunk(tool_call=_tool_call("web_search", '{"query":"garden"}'))]
+        return [_chunk(text="The search timed out, so I could not look that up.")]
+
+    events = list(agent_events([{"role": "user", "content": "Search the web."}], complete))
+
+    tool_messages = [
+        message for message in observed_messages if message.get("role") == "tool"
+    ]
+    assert call_count == 2
+    assert len(tool_messages) == 1
+    assert "timed out after 10 seconds" in str(tool_messages[0]["content"])
+    assert events[-1]["type"] == "done"
 
 
 def test_invalid_tool_arguments_retry_once_then_explain() -> None:

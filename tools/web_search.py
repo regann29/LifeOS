@@ -16,15 +16,24 @@ def search_web(query: str) -> list[dict[str, str]]:
                 "summary": "Add TAVILY_API_KEY to your local .env file to enable web search.",
             }
         ]
-    response: dict[str, Any] = TavilyClient(api_key=api_key).search(
+    response: Any = TavilyClient(api_key=api_key).search(
         query=query,
         max_results=5,
         search_depth="basic",
+        timeout=10,
     )
+    if not isinstance(response, dict) or not isinstance(response.get("results"), list):
+        raise ValueError("Web search returned an unexpected response. Please try again.")
+
     results: list[dict[str, str]] = []
-    for item in response.get("results", [])[:5]:
+    for item in response["results"][:5]:
         if not isinstance(item, dict):
-            continue
+            raise ValueError("Web search returned an unexpected result. Please try again.")
+        if not all(
+            isinstance(item.get(key, ""), str)
+            for key in ("title", "url", "content")
+        ):
+            raise ValueError("Web search returned an unexpected result. Please try again.")
         results.append(
             {
                 "title": str(item.get("title", "")),
